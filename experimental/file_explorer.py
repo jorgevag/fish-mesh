@@ -27,6 +27,7 @@ class FileExplorerProgram:
             text="Browse Files",
             command=self.select_file,
         )
+        self.file_explorer_button.pack()
 
         self.selected_file = tk.StringVar()
 
@@ -34,16 +35,35 @@ class FileExplorerProgram:
         self.label_file_explorer = Label(
             self.window,
             text="No file selected",
-            # width=100,
-            # height=4,
-            # fg="blue"
         )
+        self.label_file_explorer.pack()
 
         self.load_image_button = Button(
             self.window,
             text="Load Image",
             command=self.load_image,
         )
+        self.load_image_button.pack()
+        self.img_cv2 = None
+
+        self.canvas = Canvas(self.window, width=0, height=0, bg="white")
+        self.canvas.pack(fill="both", expand=True)
+        self.window.bind('<Configure>', self.resize_callback)
+
+        self.rotate_buttons_frame = Frame(self.window)
+        self.rotate_buttons_frame.pack(fill="x")
+        self.rotate_anticlockwise_button = Button(
+            self.rotate_buttons_frame,
+            text="\u21BB",
+            command=self.rotate_image_clockwise,
+        )
+        self.rotate_anticlockwise_button.pack(side=LEFT, fill="x", expand=True)
+        self.rotate_clockwise_button = Button(
+            self.rotate_buttons_frame,
+            text="\u21BA",
+            command=self.rotate_image_anticlockwise,
+        )
+        self.rotate_clockwise_button.pack(side=RIGHT, fill="x", expand=True)
 
         self.exit_button = Button(
             self.window,
@@ -52,19 +72,9 @@ class FileExplorerProgram:
         )
 
         self.exit_button = ttk.Button(self.window, text="Quit")
-        #self.exit_button.grid(row=2, column=0)
         self.exit_button['command'] = self.window.destroy
+        self.exit_button.pack()
 
-
-        # Place components:
-        #self.selected_file.grid(row=0, column=0)
-        self.file_explorer_button.grid(column=1, row=1)
-        self.label_file_explorer.grid(column=1, row=2)
-        self.load_image_button.grid(column=1, row=3)
-        self.canvas = Canvas(self.window, width=600, height=600)
-        #self.canvas.pack()
-        self.canvas.grid(column=1, row=4)
-        self.exit_button.grid(column=1, row=5)
 
 
     def select_file(self):
@@ -82,34 +92,6 @@ class FileExplorerProgram:
         # Show selected file
         self.label_file_explorer.configure(text="Selected File: " + filename)
 
-        # # Canvas to draw image on
-        # # pil_img = Image.open(filename)
-        # pil_img = cv2.imread(filename)
-        #
-        # # Trying to rescale image to fit into display
-        # # (the displayed image only showed a subppart of the total photo.. but maybe this can be
-        # #  avoided altogether by using some other method...)
-        # output_size = 4000
-        # # w = pil_img.size[0]
-        # # h = pil_img.size[1]
-        # w = len(pil_img[0])
-        # h = len(pil_img)
-        # if w > h:
-        #     scaling =  float(output_size)
-        # else:
-        #     scaling =  float(output_size) / h
-        # new_w = int(w * scaling)
-        # new_h = int(h * scaling)
-        # # resized = pil_img.copy().resize((new_w, new_h), Image.ANTIALIAS)
-        # resized = cv2.resize(pil_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
-        # #cv2.imshow("resized image", resized)
-        #
-        # # pil_img.resize((new_w, new_h))
-        # img_resized = Image.fromarray(resized)
-        # img = ImageTk.PhotoImage(img_resized)
-        # #img = ImageTk.PhotoImage(cv2.imread(self.selected_file.get()))
-        # self.canvas.create_image(output_size, output_size, image=img)
-
     def load_image(self):
         img_array_BGR = cv2.imread(self.selected_file.get())
 
@@ -117,33 +99,80 @@ class FileExplorerProgram:
         img_array_RGB = cv2.cvtColor(img_array_BGR, cv2.COLOR_BGR2RGB)
 
         # https://stackoverflow.com/questions/19838972/how-to-update-an-image-on-a-canvas/19842646
+        self.img_cv2 = img_array_RGB
         img = Image.fromarray(img_array_RGB)
-        photo_img = ImageTk.PhotoImage(img)
-        self.image_on_canvas = self.canvas.create_image(0, 0, image=photo_img)
-        #self.canvas.configure(photo_img, height=photo_img.height(), width=photo_img.width())
-        self.canvas.itemconfig(self.image_on_canvas, image=photo_img)
-        self.canvas.image = photo_img
+        self.img_tk = ImageTk.PhotoImage(img)
+        self.draw_image()
 
-    def resize_image(self):
+    def _resize_image(self, event):
         # Maybe we also need to resize image to the window size:
         # https://stackoverflow.com/questions/24061099/tkinter-resize-background-image-to-window-size
-        pass
+        new_width = event.width
+        new_height = event.height
 
-class Dog:
-    def __init__(self):
-        self.age = 10
+        resized = cv2.resize(self.img_cv2, (new_width, new_height), interpolation=cv2.INTER_AREA)
 
-    def growing_older(self, year_passed):
-        self.age += year_passed
+        self.resized_img = ImageTk.PhotoImage(Image.fromarray(resized))
+        #self.canvas.configure(image =  self.resized_img)
 
-a_dog = Dog()
-a_dog.growing_older(2)
-a_dog.age
+    def resize_image(self, preserve_aspect_ratio=True):
+        img_width = len(self.img_cv2[0])
+        img_height = len(self.img_cv2)
+        canvas_width = self.canvas.winfo_width()
+        canvas_height = self.canvas.winfo_height()
+        if preserve_aspect_ratio:
+            # Check how much to scale image width to be within canvas width:
+            required_width_scaling = canvas_width / img_width
+            # and also for the height:
+            required_height_scaling = canvas_height / img_height
+
+            # The one with the minimum required scaling is used:
+            # * when smaller than canvas, image is resized based on which dimension is closest
+            # * when larger than canvas, scale will be most negative for dimension that "overshoots" the most
+            scaling = min(required_width_scaling, required_height_scaling)
+
+            new_img_width = int(img_width * scaling)
+            new_img_height = int(img_height * scaling)
+
+            resized = cv2.resize(self.img_cv2, (new_img_width, new_img_height), interpolation=cv2.INTER_AREA)
+            self.resized_img_width = new_img_width
+            self.resized_img_height = new_img_height
+        else:
+            resized = cv2.resize(self.img_cv2, (canvas_width, canvas_height), interpolation=cv2.INTER_AREA)
+            self.resized_img_width = canvas_width
+            self.resized_img_height = canvas_height
+        self.resized_img = ImageTk.PhotoImage(Image.fromarray(resized))
+
+    def draw_image(self):
+        if self.img_cv2 is None:
+            return
+
+        self.resize_image()
+
+        # Get x,y position to center image drawn on canvas using anchor to NW
+        x = (self.canvas.winfo_width() - self.resized_img_width) // 2
+        y = (self.canvas.winfo_height() - self.resized_img_height) // 2
+        self.image_on_canvas = self.canvas.create_image(x, y, image=self.resized_img, anchor=tk.NW)
+        # self.canvas.configure(photo_img, height=photo_img.height(), width=photo_img.width())
+        self.canvas.itemconfig(self.image_on_canvas, image=self.resized_img)
+        self.canvas.image = self.resized_img
+        self.canvas.configure(bg="black")
+
+    def resize_callback(self, event):
+        self.draw_image()
+
+    def rotate_image_clockwise(self):
+        self.img_cv2 = cv2.rotate(self.img_cv2, cv2.ROTATE_90_CLOCKWISE)
+        self.draw_image()
+
+    def rotate_image_anticlockwise(self):
+        self.img_cv2 = cv2.rotate(self.img_cv2, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        self.draw_image()
+
+    def run(self):
+        self.window.mainloop()
+
 
 if __name__ == "__main__":
-
-    # Create the entire GUI program
     program = FileExplorerProgram()
-
-    # Start the GUI event loop
-    program.window.mainloop()
+    program.run()
