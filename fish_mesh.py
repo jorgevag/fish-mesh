@@ -20,7 +20,6 @@ from tkinter import ttk
   * point drawing logic (maybe just draw a ruler/line between points)
 * if bounding box is changed, update warped image on the release_callback
 """
-import components as comp
 
 @dataclass
 class FileExplorer:
@@ -47,6 +46,13 @@ class ImageView:
     resized_width = None
     resized_height = None
 
+    points = None
+    drawn_points = None
+    lines = None
+    drawn_lines = None
+    dragging_point = False
+    drawn_dragged_point = None
+
 @dataclass
 class Point:
     x: float
@@ -71,6 +77,9 @@ class FishMesh:
         self.window.config(background="white")
         self.window.geometry(f"{self.window.winfo_screenwidth()}x{self.window.winfo_screenheight()}")
 
+        screen_width = self.window.winfo_screenwidth()
+        self.point_radii = int(0.005 * screen_width)  # Make point sizes 1 % of monitor width
+
         file_explorer = FileExplorer()
         file_explorer.button = Button(
             self.window,
@@ -89,6 +98,7 @@ class FishMesh:
         self.file_explorer: FileExplorer = file_explorer
 
         self.img = None
+        self.displayed_text = None
 
         self.image_displays = tk.Frame(self.window)
         self.image_displays.pack(fill="both", expand=True)
@@ -115,21 +125,19 @@ class FishMesh:
         # self.right_view.canvas.pack(expand=True)
         # self.window.bind('<Configure>', self.resize_callback)
 
-        # drag corner callbacks
-        self.bounding_box = []
-        self.drawn_bounding_box = None
-        self.drawn_bounding_box_lines = None
         """
         mouse-button  click      hold&move    release
         left          <Button-1>, <B1-Motion>, <ButtonRelease-1>
         middle        <Button-2>, <B2-Motion>, <ButtonRelease-2>
         right         <Button-3>, <B3-Motion>, <ButtonRelease-3>
         """
-        self.corner_selected = False
-        self._drawn_dragged_point = None
         self.left_view.canvas.bind("<Button-1>", partial(self.click_callback, self.left_view))
         self.left_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.left_view))
         self.left_view.canvas.bind("<ButtonRelease-1>", partial(self.release_callback, self.left_view))
+
+        self.right_view.canvas.bind("<Button-1>", partial(self.click_callback, self.right_view))
+        self.right_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.right_view))
+        self.right_view.canvas.bind("<ButtonRelease-1>", partial(self.release_callback, self.right_view))
 
         self.rotate_buttons_frame = tk.Frame(self.window)
         self.rotate_buttons_frame.pack(fill="x")
@@ -164,8 +172,9 @@ class FishMesh:
         self.select_file()
         self.load_image()
         #
-        self.init_bounding_box()
+        self.init_bounding_box(self.left_view)
         self.warp_image()
+        self.init_ruler(self.right_view)
         self.draw()
 
 
@@ -263,6 +272,8 @@ class FishMesh:
 
         if self.right_view.img is not None:
             self.draw_image(self.right_view)
+            self.draw_ruler(self.right_view)
+            self.draw_ruler_measure()
 
 
     def resize_callback(self, event):
@@ -281,121 +292,180 @@ class FishMesh:
     def run(self):
         self.window.mainloop()
 
-    def init_bounding_box(self):
+    def init_bounding_box(self, img_view):
         # w = self.canvas.winfo_width()
         # h = self.canvas.winfo_height()
         top_left = Point(0.20, 0.20)
         bottom_left = Point(0.20, 0.80)
         bottom_right = Point(0.80, 0.80)
         top_right = Point(0.80, 0.20)
-        self.bounding_box: List[Point] = [top_left, bottom_left, bottom_right, top_right]
+        img_view.points = [top_left, bottom_left, bottom_right, top_right]
 
     def draw_bounding_box(self, img_view):
-        if len(self.bounding_box) == 0:
-            self.init_bounding_box()
+        if img_view.points is None or len(img_view.points) == 0:
+            self.init_bounding_box(img_view)
 
         # TODO: simplify drawing lines and points (naming and structuring should also be improved)
         # Draw lines
         # To get the correct pair of points we need a certain order:
-        if self.drawn_bounding_box_lines:
-            for line in self.drawn_bounding_box_lines:
+        if img_view.drawn_lines:
+            for line in img_view.drawn_lines:
                 img_view.canvas.delete(line)
-        self.drawn_bounding_box_lines = []
+        img_view.drawn_lines = []
         x0 = img_view.x_padding
         y0 = img_view.y_padding
-        point_arr = np.stack([np.array([(p.x * img_view.resized_width) + x0, (p.y * img_view.resized_height) + y0 ]) for p in self.bounding_box])
+        point_arr = np.stack([np.array([(p.x * img_view.resized_width) + x0, (p.y * img_view.resized_height) + y0 ]) for p in img_view.points])
         ps = np.reshape(point_arr, (4,2))
-        #ps = [p[0] for p in _reorder_corner_points(point_arr, "drawing_bounding_box")]
-        self.drawn_bounding_box_lines.append(img_view.canvas.create_line(ps[0,0], ps[0,1], ps[1,0], ps[1,1], fill="red"))
-        self.drawn_bounding_box_lines.append(img_view.canvas.create_line(ps[1,0], ps[1,1], ps[2,0], ps[2,1], fill="red"))
-        self.drawn_bounding_box_lines.append(img_view.canvas.create_line(ps[2,0], ps[2,1], ps[3,0], ps[3,1], fill="red"))
-        self.drawn_bounding_box_lines.append(img_view.canvas.create_line(ps[3,0], ps[3,1], ps[0,0], ps[0,1], fill="red"))
+        img_view.drawn_lines.append(img_view.canvas.create_line(ps[0,0], ps[0,1], ps[1,0], ps[1,1], fill="red"))
+        img_view.drawn_lines.append(img_view.canvas.create_line(ps[1,0], ps[1,1], ps[2,0], ps[2,1], fill="red"))
+        img_view.drawn_lines.append(img_view.canvas.create_line(ps[2,0], ps[2,1], ps[3,0], ps[3,1], fill="red"))
+        img_view.drawn_lines.append(img_view.canvas.create_line(ps[3,0], ps[3,1], ps[0,0], ps[0,1], fill="red"))
 
         w = img_view.resized_width
         h = img_view.resized_height
-        screen_width = self.window.winfo_screenwidth()
-        point_size = int(0.005 * screen_width)
         # Delete the previously drawn points:
-        if self.drawn_bounding_box:
-            for drawn_corner in self.drawn_bounding_box:
+        if img_view.drawn_points:
+            for drawn_corner in img_view.drawn_points:
                 img_view.canvas.delete(drawn_corner)
         # Draw bounding box (and keep track of points):
-        self.drawn_bounding_box = []
-        for corner in self.bounding_box:
-            if corner is not None:
-                canvas_obj = img_view.canvas.create_oval(
+        img_view.drawn_points = []
+        for point in img_view.points:
+            if point is not None:
+                canvas_point = img_view.canvas.create_oval(
                     # set point diagonal as 2% of monitor screen width
-                    img_view.x_padding + int(w * corner.x) - point_size,
-                    img_view.y_padding + int(h * corner.y) - point_size,
-                    img_view.x_padding + int(w * corner.x) + point_size,
-                    img_view.y_padding + int(h * corner.y) + point_size,
+                    img_view.x_padding + int(w * point.x) - self.point_radii,
+                    img_view.y_padding + int(h * point.y) - self.point_radii,
+                    img_view.x_padding + int(w * point.x) + self.point_radii,
+                    img_view.y_padding + int(h * point.y) + self.point_radii,
                     fill='red'
                 )
-                self.drawn_bounding_box.append(canvas_obj)
+                img_view.drawn_points.append(canvas_point)
+
+    def init_ruler(self, img_view):
+        # w = self.canvas.winfo_width()
+        # h = self.canvas.winfo_height()
+        left = Point(0, 0.50)
+        right = Point(0.50, 0.50)
+        img_view.points = [left, right]
+
+    def draw_ruler(self, img_view):
+        if img_view.points is None or len(img_view.points) == 0:
+            self.init_ruler(img_view)
+        w = img_view.resized_width
+        h = img_view.resized_height
+
+        # Draw the ruler's line
+        if img_view.drawn_lines:
+            for line in img_view.drawn_lines:
+                img_view.canvas.delete(line)
+        img_view.drawn_lines = []
+        p1 = img_view.points[0]
+        p2 = img_view.points[1]
+        img_view.drawn_lines.append(img_view.canvas.create_line(
+            img_view.x_padding + (w * p1.x),
+            img_view.y_padding + (h * p1.y),
+            img_view.x_padding + (w * p2.x),
+            img_view.y_padding + (h * p2.y),
+            width=3,
+            fill="red"
+        ))
+
+        # Delete the previously drawn points:
+        if img_view.drawn_points:
+            for drawn_corner in img_view.drawn_points:
+                img_view.canvas.delete(drawn_corner)
+        # Draw ruler points:
+        img_view.drawn_points = []
+        for point in img_view.points:
+            canvas_point = img_view.canvas.create_oval(
+                img_view.x_padding + int(w * point.x) - self.point_radii,
+                img_view.y_padding + int(h * point.y) - self.point_radii,
+                img_view.x_padding + int(w * point.x) + self.point_radii,
+                img_view.y_padding + int(h * point.y) + self.point_radii,
+                fill='red'
+            )
+            img_view.drawn_points.append(canvas_point)
+
+    def read_ruler(self):
+        points = self.right_view.points
+        p1 = points[0]
+        p2 = points[1]
+        return np.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2)
+
+    def draw_ruler_measure(self):
+        ruler_length = self.read_ruler()
+        ruler_percentage_length = ruler_length * 100
+        text = f"relative length: {ruler_percentage_length:.2f} %"
+        if self.displayed_text is not None:
+            self.right_view.canvas.delete(self.displayed_text)
+        self.displayed_text = self.right_view.canvas.create_text(10, 10, text=text, fill="red", anchor=tk.NW, font=(None, 16))
 
 
     def click_callback(self, img_view: ImageView, event):
         x = event.x
         y = event.y
-        if self.drawn_bounding_box is not None:  # coreners must be drawn
-            closest = img_view.canvas.find_closest(x, y, halo=10, start=self.drawn_bounding_box)
-            selected_corner_tag = closest[0]
-            if selected_corner_tag in self.drawn_bounding_box:
-                self.corner_selected = True
+        if img_view.drawn_points is not None:  # coreners must be drawn
+            closest = img_view.canvas.find_closest(x, y, halo=10, start=img_view.drawn_points)
+            selected_point_id = closest[0]
+            if selected_point_id in img_view.drawn_points:
+                img_view.dragging_point = True
                 # Delete selected point (it will be redrawn on the release position)
-                self.selected_corner_idx = self.drawn_bounding_box.index(selected_corner_tag)
-                img_view.canvas.delete(selected_corner_tag)
-                self.drawn_bounding_box.remove(selected_corner_tag)
-                self.bounding_box[self.selected_corner_idx] = None
+                selected_point_idx = img_view.drawn_points.index(selected_point_id)
+                del img_view.points[selected_point_idx]  #img_view.points[selected_point_idx] = None
+                img_view.canvas.delete(selected_point_id)
+                img_view.drawn_points.remove(selected_point_id)
                 # Remove lines (this is easier than to draw lines for all points in the drag_callback)
-                if self.drawn_bounding_box_lines:
-                    for line in self.drawn_bounding_box_lines:
+                if img_view.drawn_lines:
+                    for line in img_view.drawn_lines:
                         img_view.canvas.delete(line)
 
     def drag_callback(self, img_view: ImageView, event):
         x = event.x
         y = event.y
+
         # make sure point isn't dragged outside canvas
         x = max(0, x)
         y = max(0, y)
         x = min(img_view.canvas.winfo_width(), x)
         y = min(img_view.canvas.winfo_height(), y)
-        if self.corner_selected:
-            screen_width = self.window.winfo_screenwidth()
-            point_size = int(0.005 * screen_width)  # TODO: make a member variable of this
-            if self._drawn_dragged_point:
-                img_view.canvas.delete(self._drawn_dragged_point)
-            self._drawn_dragged_point = img_view.canvas.create_oval(
+
+        if img_view.dragging_point:
+            if img_view.drawn_dragged_point:
+                img_view.canvas.delete(img_view.drawn_dragged_point)
+            img_view.drawn_dragged_point = img_view.canvas.create_oval(
                 # set point diagonal as 2% of monitor screen width
-                x - point_size,
-                y - point_size,
-                x + point_size,
-                y + point_size,
+                x - self.point_radii,
+                y - self.point_radii,
+                x + self.point_radii,
+                y + self.point_radii,
                 fill='IndianRed1'
             )
 
     def release_callback(self, img_view: ImageView, event):
         x = event.x
         y = event.y
+
         # make sure point isn't dragged outside canvas
         x = max(0, x)
         y = max(0, y)
         x = min(img_view.canvas.winfo_width(), x)
         y = min(img_view.canvas.winfo_height(), y)
-        if self.corner_selected:
-            self.corner_selected = False
-            if self._drawn_dragged_point:
-                img_view.canvas.delete(self._drawn_dragged_point)
-            self._drawn_dragged_point = None
+
+        if img_view.dragging_point:
+            img_view.dragging_point = False  # On release we're no longer dragging the point
+            if img_view.drawn_dragged_point:
+                img_view.canvas.delete(img_view.drawn_dragged_point)
+            img_view.drawn_dragged_point = None
+
+            # Add the released point:
             rel_x = (x - img_view.x_padding) / img_view.resized_width
             rel_y = (y - img_view.y_padding) / img_view.resized_height
-            self.bounding_box[self.bounding_box.index(None)] = Point(rel_x, rel_y)
-            #self.draw_bounding_box(img_view)
+            img_view.points.append(Point(rel_x, rel_y))  #img_view.points[img_view.points.index(None)] = Point(rel_x, rel_y)
             self.warp_image()
             self.draw()
 
     def warp_image(self):
-        corners_ndarray = self.points_to_ndarray(self.bounding_box)
+        corners_ndarray = self.points_to_ndarray(self.left_view.points)
         self.warped_image = warp_image(self.img, corners_ndarray)
         self.warp_activated = True
 
