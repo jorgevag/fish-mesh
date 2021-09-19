@@ -189,14 +189,18 @@ class FishMesh:
         x = (self.canvas.winfo_width() - self.resized_img_width) // 2
         y = (self.canvas.winfo_height() - self.resized_img_height) // 2
         self.image_on_canvas = self.canvas.create_image(x, y, image=self.resized_img, anchor=tk.NW)
+        # The position is equal to the "padding" (on one side) required to preserve aspect ratio
+        self.x_padding = x
+        self.y_padding = y
         # self.canvas.configure(photo_img, height=photo_img.height(), width=photo_img.width())
         self.canvas.itemconfig(self.image_on_canvas, image=self.resized_img)
         self.canvas.image = self.resized_img
         self.canvas.configure(bg="black")
 
     def resize_callback(self, event):
-        self.draw_image()
-        self.draw_bounding_box()
+        if self.img_cv2 is not None:
+            self.draw_image()
+            self.draw_bounding_box()
 
     def rotate_image_clockwise(self):
         self.img_cv2 = cv2.rotate(self.img_cv2, cv2.ROTATE_90_CLOCKWISE)
@@ -221,9 +225,10 @@ class FishMesh:
         self.bounding_box: List[Point] = [top_left, bottom_left, bottom_right, top_right]
 
     def draw_bounding_box(self):
-        w = self.canvas.winfo_width()
-        h = self.canvas.winfo_height()
+        w = self.resized_img_width
+        h = self.resized_img_height
         screen_width = self.window.winfo_screenwidth()
+        point_size = int(0.005 * screen_width)
         # Delete the previously drawn points:
         if self.drawn_bounding_box:
             for drawn_corner in self.drawn_bounding_box:
@@ -234,36 +239,14 @@ class FishMesh:
             if corner is not None:
                 canvas_obj = self.canvas.create_oval(
                     # set point diagonal as 2% of monitor screen width
-                    int(w * corner.x) - int(0.005 * screen_width),
-                    int(h * corner.y) - int(0.005 * screen_width),
-                    int(w * corner.x) + int(0.005 * screen_width),
-                    int(h * corner.y) + int(0.005 * screen_width),
+                    self.x_padding + int(w * corner.x) - point_size,
+                    self.y_padding + int(h * corner.y) - point_size,
+                    self.x_padding + int(w * corner.x) + point_size,
+                    self.y_padding + int(h * corner.y) + point_size,
                     fill='red'
                 )
                 self.drawn_bounding_box.append(canvas_obj)
-        # if self.drawn_bounding_box is None:
-        #     # Draw bounding box points
-        #     self.drawn_bounding_box = []
-        #     for corner in self.bounding_box:
-        #         canvas_obj = self.canvas.create_oval(
-        #             # set point diagonal as 2% of monitor screen width
-        #             int(w * corner.x) - int(0.005 * screen_width),
-        #             int(h * corner.y) - int(0.005 * screen_width),
-        #             int(w * corner.x) + int(0.005 * screen_width),
-        #             int(h * corner.y) + int(0.005 * screen_width),
-        #             fill='red'
-        #         )
-        #         self.drawn_bounding_box.append(canvas_obj)
-        # else:
-        #     # Points already drawn, update existing ones
-        #     for corner, drawn_corner in zip(self.bounding_box, self.drawn_bounding_box):
-        #          self.canvas.coords(
-        #             drawn_corner,
-        #             int(w * corner.x),
-        #             int(h * corner.y),
-        #             int(w * corner.x),
-        #             int(h * corner.y),
-        #         )
+
 
     def click_callback(self, event):
         x = event.x
@@ -288,14 +271,15 @@ class FishMesh:
         y = min(self.canvas.winfo_height(), y)
         if self.corner_selected:
             screen_width = self.window.winfo_screenwidth()
+            point_size = int(0.005 * screen_width)  # TODO: make a member variable of this
             if self._drawn_dragged_point:
                 self.canvas.delete(self._drawn_dragged_point)
             self._drawn_dragged_point = self.canvas.create_oval(
                 # set point diagonal as 2% of monitor screen width
-                x - int(0.005 * screen_width),
-                y - int(0.005 * screen_width),
-                x + int(0.005 * screen_width),
-                y + int(0.005 * screen_width),
+                x - point_size,
+                y - point_size,
+                x + point_size,
+                y + point_size,
                 fill='IndianRed1'
             )
 
@@ -309,25 +293,13 @@ class FishMesh:
         y = min(self.canvas.winfo_height(), y)
         if self.corner_selected:
             self.corner_selected = False
-            screen_width = self.window.winfo_screenwidth()
             if self._drawn_dragged_point:
                 self.canvas.delete(self._drawn_dragged_point)
             self._drawn_dragged_point = None
-            self.drawn_bounding_box.append(self.canvas.create_oval(
-                # set point diagonal as 2% of monitor screen width
-                x - int(0.005 * screen_width),
-                y - int(0.005 * screen_width),
-                x + int(0.005 * screen_width),
-                y + int(0.005 * screen_width),
-                fill='red'
-            ))
-            rel_x = x / self.canvas.winfo_width()
-            rel_y = y / self.canvas.winfo_height()
-            # rel_x = x / self.window.winfo_width()
-            # rel_y = x / self.window.winfo_height()
-            # rel_x = self.canvas.winfo_pointerx() - self.canvas.winfo_rootx() / self.canvas.winfo_width()
-            # rel_y = self.canvas.winfo_pointery() - self.canvas.winfo_rooty() / self.canvas.winfo_height()
+            rel_x = (x - self.x_padding) / self.resized_img_width
+            rel_y = (y - self.y_padding) / self.resized_img_height
             self.bounding_box[self.bounding_box.index(None)] = Point(rel_x, rel_y)
+            self.draw_bounding_box()
 
 
 """
