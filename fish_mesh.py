@@ -315,7 +315,9 @@ class FishMesh:
         x0 = img_view.x_padding
         y0 = img_view.y_padding
         point_arr = np.stack([np.array([(p.x * img_view.resized_width) + x0, (p.y * img_view.resized_height) + y0 ]) for p in img_view.points])
-        ps = np.reshape(point_arr, (4,2))
+        # order to get top_left, top_right, bottom_right, bottom_left:
+        ordered_point_arr = _reorder_corner_points(point_arr, "drawing_bounding_box")
+        ps = np.reshape(ordered_point_arr, (4,2))
         img_view.drawn_lines.append(img_view.canvas.create_line(ps[0,0], ps[0,1], ps[1,0], ps[1,1], fill="red"))
         img_view.drawn_lines.append(img_view.canvas.create_line(ps[1,0], ps[1,1], ps[2,0], ps[2,1], fill="red"))
         img_view.drawn_lines.append(img_view.canvas.create_line(ps[2,0], ps[2,1], ps[3,0], ps[3,1], fill="red"))
@@ -507,16 +509,19 @@ def _reorder_corner_points(corner_points, reorder_for="warp"):
     reordered_points = np.zeros((4, 1, 2), np.int32)
 
     pair_sum = corner_points.sum(1)
-    reordered_points[0] = corner_points[np.argmin(pair_sum)]
-    reordered_points[3] = corner_points[np.argmax(pair_sum)]
-
     pair_diff = np.diff(corner_points, axis=1)
     if reorder_for == "warp":
+        reordered_points[0] = corner_points[np.argmin(pair_sum)]
+        reordered_points[3] = corner_points[np.argmax(pair_sum)]
+
         reordered_points[1] = corner_points[np.argmin(pair_diff)]
         reordered_points[2] = corner_points[np.argmax(pair_diff)]
     elif reorder_for == "drawing_bounding_box":
-        reordered_points[2] = corner_points[np.argmin(pair_diff)]
-        reordered_points[1] = corner_points[np.argmax(pair_diff)]
+        reordered_points[0] = corner_points[np.argmin(pair_sum)]  # x+y smallest (upper left)
+        reordered_points[2] = corner_points[np.argmax(pair_sum)]  # x+y largest (lower right)
+
+        reordered_points[3] = corner_points[np.argmin(pair_diff)]  # x-y smallest (lower left)
+        reordered_points[1] = corner_points[np.argmax(pair_diff)]  # x-y larger (upper right)
     else:
         raise ValueError("Unknown reorder_for. Allowed values: 'warp' or 'drawing_bounding_box'")
     return reordered_points
