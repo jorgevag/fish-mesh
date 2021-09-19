@@ -21,9 +21,11 @@ class FileExplorerProgram:
         self.window.title('File Explorer')
         #self.window.geometry("500x500")  # Set window size
         self.window.config(background="white")
+        self.window.geometry(f"{self.window.winfo_screenwidth()}x{self.window.winfo_screenheight()}")
 
         self.file_explorer_button = Button(
             self.window,
+            bg="white",
             text="Browse Files",
             command=self.select_file,
         )
@@ -31,10 +33,10 @@ class FileExplorerProgram:
 
         self.selected_file = tk.StringVar()
 
-        # Create a File Explorer label
         self.label_file_explorer = Label(
             self.window,
             text="No file selected",
+            bg="white",
         )
         self.label_file_explorer.pack()
 
@@ -42,6 +44,7 @@ class FileExplorerProgram:
             self.window,
             text="Load Image",
             command=self.load_image,
+            bg="white",
         )
         self.load_image_button.pack()
         self.img_cv2 = None
@@ -54,28 +57,28 @@ class FileExplorerProgram:
         self.rotate_buttons_frame.pack(fill="x")
         self.rotate_anticlockwise_button = Button(
             self.rotate_buttons_frame,
-            text="\u21BB",
+            text="\u21BB",  # unicode char for anticlockwise circular arrow
             command=self.rotate_image_clockwise,
+            bg="white",
         )
         self.rotate_anticlockwise_button.pack(side=LEFT, fill="x", expand=True)
         self.rotate_clockwise_button = Button(
             self.rotate_buttons_frame,
-            text="\u21BA",
+            text="\u21BA",  # unicode char for anticlockwise circular arrow
             command=self.rotate_image_anticlockwise,
+            bg="white",
         )
         self.rotate_clockwise_button.pack(side=RIGHT, fill="x", expand=True)
 
         self.exit_button = Button(
             self.window,
-            text="Exit",
-            command=exit
+            text="Quit",
+            command=exit,
+            bg="white",
         )
-
-        self.exit_button = ttk.Button(self.window, text="Quit")
-        self.exit_button['command'] = self.window.destroy
-        self.exit_button.pack()
-
-
+        #self.exit_button = ttk.Button(self.window, text="Quit")
+        #self.exit_button['command'] = self.window.destroy
+        self.exit_button.pack(fill="x")
 
     def select_file(self):
         """opening file explorer window"""
