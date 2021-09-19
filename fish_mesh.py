@@ -10,13 +10,6 @@ import tkinter as tk
 from tkinter import ttk
 
 """
-TODO:
-* bug: drawn points resize wrong due to not accounting for "black padding" 
-       when aspect ratio change
-  Solution:
-  * save x,y padding when centering image during drawing
-  * use saved padding in drawing points
-  
 * load image upon file selection, show red error message if image file
   not supported
 * modularize components to have less mental overhead
@@ -40,7 +33,7 @@ class FishMesh:
             self.window,
             bg="white",
             text="Browse Files",
-            command=self.select_file,
+            command=self.load_selected_file,
         )
         self.file_explorer_button.pack()
 
@@ -53,13 +46,6 @@ class FishMesh:
         )
         self.label_file_explorer.pack()
 
-        self.load_image_button = Button(
-            self.window,
-            text="Load Image",
-            command=self.load_image,
-            bg="white",
-        )
-        self.load_image_button.pack()
         self.img_cv2 = None
 
         self.canvas = Canvas(self.window, width=0, height=0, bg="white")
@@ -110,6 +96,10 @@ class FishMesh:
 
 
 
+
+    def load_selected_file(self):
+        self.select_file()
+        self.load_image()
 
     def select_file(self):
         """opening file explorer window"""
