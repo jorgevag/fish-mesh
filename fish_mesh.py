@@ -12,13 +12,9 @@ import tkinter as tk
 from tkinter import ttk
 
 """
-* load image upon file selection, show red error message if image file
-  not supported
-* modularize components to have less mental overhead
-* when warping image, show warped image as a new canvas on the side
-  * will also need to have resize functionality
-  * point drawing logic (maybe just draw a ruler/line between points)
-* if bounding box is changed, update warped image on the release_callback
+TODO 
+  * consider adding zoom functionality (this might leave the resize logic unnecessary; which is good)
+    https://stackoverflow.com/questions/41656176/tkinter-canvas-zoom-move-pan
 """
 
 @dataclass
@@ -477,18 +473,6 @@ class FishMesh:
         return np.stack([np.array([p.x * img_width, p.y * img_height]) for p in points])
 
 
-
-"""
-how to create draggable point:
-  1. on click find closest drawn point, use self.canvas.find_closest()
-  2. if close enough find index of point, delete drawn point, set self.bounding_box[index] = None, and
-     if a corner is None, then don't draw it (add if-statement in the drawing function), set
-     a flag, self.moving_corner=True
-  3. Draw point on cursor if self.moving_corner=True
-  3. set self.moving_corner=False, get cursor position, create Point and replace with
-     None value in self.bounding_box, redraw bounding_box
-"""
-
 def warp_image(img, corner_points):
     corner_points = _reorder_corner_points(corner_points, "warp")
     img_width = img.shape[1]
@@ -527,6 +511,16 @@ def _reorder_corner_points(corner_points, reorder_for="warp"):
     return reordered_points
 
 
+"""
+Create draggable point:
+  1. on click find closest drawn point, use self.canvas.find_closest()
+  2. if close enough find index of point, delete drawn point, set self.bounding_box[index] = None, and
+     if a corner is None, then don't draw it (add if-statement in the drawing function), set
+     a flag, self.moving_corner=True
+  3. Draw point on cursor if self.moving_corner=True
+  3. set self.moving_corner=False, get cursor position, create Point and replace with
+     None value in self.bounding_box, redraw bounding_box
+"""
 
 if __name__ == "__main__":
     fm = FishMesh()
