@@ -15,6 +15,13 @@ from tkinter import ttk
 TODO 
   * consider adding zoom functionality (this might leave the resize logic unnecessary; which is good)
     https://stackoverflow.com/questions/41656176/tkinter-canvas-zoom-move-pan
+  * draw multiple lines:
+    * left-click:
+      * if not close to another point: (probably need to extend existing callback for right_view)
+      * 
+    * right-click:
+      * if drawing_ruler: cancel
+      * if not drawling_ruler and sufficiently close to point: delete ruler related to point (delete both points and line)
 """
 
 @dataclass
@@ -276,15 +283,70 @@ class FishMesh:
         self.draw()  # redraw everything to the new canvas display sizes
 
     def rotate_image_clockwise(self):
+        # self.rotate_points("clockwise")
         self.img = cv2.rotate(self.img, cv2.ROTATE_90_CLOCKWISE)
+        self.init_bounding_box(self.left_view)  # redraw box since it is hard to rotate points
         self.warp_image()
         self.draw()
 
     def rotate_image_anticlockwise(self):
+        # self.rotate_points("anticlockwise")
         self.img = cv2.rotate(self.img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        self.init_bounding_box(self.left_view)  # redraw box since it is hard to rotate points
         self.warp_image()
         self.draw()
 
+    # def rotate_points(self, direction: str):
+    #     """
+    #     This doesn't work.
+    #     Things that I need to consider:
+    #     * when rotating paddings change, since the view is rectangular, it can lead to a smaller or greater padding
+    #       in the new direction. (maybe I need both paddings before and after to do this right)
+    #     * I feel like there should be a way to just swap coordinates as long as I get the new padding
+    #     * I have the canbas width and height and resized image width and height, so I got everything I need
+    #
+    #     ooo PROBLEM!, image might be resized during rotation,... then all points must be scaled differently when scaling back
+    #     """
+    #     # xs = [p.x * self.left_view.resized_width + self.left_view.x_padding for p in self.left_view.points]
+    #     # ys = [p.y * self.left_view.resized_height + self.left_view.y_padding for p in self.left_view.points]
+    #     # center_x = np.sum(xs) / len(ys)
+    #     # center_y = np.sum(ys) / len(ys)
+    #     # for x, y, p in zip(xs, ys, self.left_view.points):
+    #     #     # translate point to origin:
+    #     #     tx, ty = x - center_x, y - center_y
+    #     #     # rotate:
+    #     #     if direction == "clockwise":
+    #     #         rtx, rty = -ty, tx
+    #     #     elif direction == "anticlockwise":
+    #     #         rtx, rty = ty, -tx
+    #     #     else:
+    #     #         raise ValueError("Unknown 'direction', expected 'clockwise' or 'anticlockwise'")
+    #     #     # translate back
+    #     #     rx, ry = rtx + center_x, rty + center_y
+    #     #     # Calculate relative points:
+    #     #     p.x = (rx - self.left_view.x_padding) / self.left_view.resized_width
+    #     #     p.y = (ry - self.left_view.y_padding) / self.left_view.resized_height
+    #
+    #     new_padding_x = self.left_view.resized_height - self.left_view.canvas.winfo_width()  # ooo, image might be resized during rotation,... then all points must be scaled differently when scaling back
+    #     for p in self.left_view.points:
+    #         old_x_px = p.x * self.left_view.resized_width + self.left_view.x_padding
+    #         old_y_px = p.y * self.left_view.resized_height  + self.left_view.y_padding
+    #         old_view_height = 2 * self.left_view.y_padding + self.left_view.resized_height
+    #         new_x_px = old_view_height - old_y_px
+    #         new_y_px = old_x_px
+    #         p.x = (new_x_px - self.left_view.x_padding) / self.left_view.resized_width
+    #         p.y = (new_y_px - self.left_view.y_padding) / self.left_view.resized_height
+    #
+    # def rotate_points_anticlockwise(self):
+    #     for p in self.left_view.points:
+    #         old_x_px = p.x * self.left_view.resized_width + self.left_view.x_padding
+    #         old_y_px = p.y * self.left_view.resized_height  + self.left_view.y_padding
+    #         old_view_width = 2 * self.left_view.x_padding + self.left_view.resized_width
+    #         new_x_px = old_y_px
+    #         new_y_px = old_view_width - old_x_px
+    #         p.x = (new_x_px - self.left_view.x_padding) / self.left_view.resized_width
+    #         p.y = (new_y_px - self.left_view.y_padding) / self.left_view.resized_height
+    #
     def run(self):
         self.window.mainloop()
 
