@@ -7,9 +7,12 @@ from pathlib import Path
 from dataclasses import dataclass
 import numpy as np
 from functools import partial
+from copy import deepcopy
 
 import tkinter as tk
 from tkinter import ttk
+
+# from colors import colors
 
 """
 TODO 
@@ -23,6 +26,27 @@ TODO
       * if drawing_ruler: cancel
       * if not drawling_ruler and sufficiently close to point: delete ruler related to point (delete both points and line)
 """
+
+colors = [
+    "red",
+    "green",
+    "blue",
+    "orange",
+    "magenta",
+    "brown",
+    "gray",
+    "yellow green",
+    "blue violet",
+    "cornflower blue",
+    "dark orange",
+    "cyan",
+    "coral",
+    "gold",
+    "hot pink",
+    "green yellow",
+    "maroon",
+    "purple"
+]
 
 @dataclass
 class FileExplorer:
@@ -53,13 +77,16 @@ class ImageView:
     drawn_points = None
     lines = None
     drawn_lines = None
-    dragging_point = False
-    drawn_dragged_point = None
+    # dragging_point = False       # TODO: consider if these should be tied to FishMesh (since you can only click on one view at a time, so they should maybe be "global" to the program
+    # drawn_dragging_point = None  # TODO: consider if these should be tied to FishMesh (since you can only click on one view at a time, so they should maybe be "global" to the program
 
 @dataclass
 class Point:
     x: float
     y: float
+    ruler_id: Optional[int] = None
+    color: Optional[str] = None
+    drawing_id: Optional[int] = None
 
 @dataclass
 class BoundingBoxDrawer:
@@ -102,6 +129,15 @@ class FishMesh:
 
         self.img = None
         self.displayed_text = None
+        self.warped_image = None
+
+        self.dragged_point: Optional[Point] = None
+
+        self.new_ruler_start_point = None
+        self.drawn_ruler_end = None
+        self.drawn_ruler_line = None
+        self.num_rulers_created = 0
+        self.rulers = []
 
         self.image_displays = tk.Frame(self.window)
         self.image_displays.pack(fill="both", expand=True)
@@ -134,13 +170,16 @@ class FishMesh:
         middle        <Button-2>, <B2-Motion>, <ButtonRelease-2>
         right         <Button-3>, <B3-Motion>, <ButtonRelease-3>
         """
-        self.left_view.canvas.bind("<Button-1>", partial(self.click_callback, self.left_view))
+        self.left_view.canvas.bind("<Button-1>", partial(self.left_click_callback, self.left_view, False))
         self.left_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.left_view))
         self.left_view.canvas.bind("<ButtonRelease-1>", partial(self.release_callback, self.left_view))
 
-        self.right_view.canvas.bind("<Button-1>", partial(self.click_callback, self.right_view))
+        self.right_view.canvas.bind("<Button-1>", partial(self.left_click_callback, self.right_view, True))
         self.right_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.right_view))
         self.right_view.canvas.bind("<ButtonRelease-1>", partial(self.release_callback, self.right_view))
+        self.right_view.canvas.bind("<Motion>", partial(self.move_callback, self.right_view))
+        #self.right_view.canvas.bind("<Button-2>", partial(self.right_click_callback, self.right_view))
+        self.right_view.canvas.bind("<Button-3>", partial(self.right_click_callback, self.right_view))
 
         self.rotate_buttons_frame = tk.Frame(self.window)
         self.rotate_buttons_frame.pack(fill="x")
@@ -159,7 +198,6 @@ class FishMesh:
         )
         self.rotate_clockwise_button.pack(side=RIGHT, fill="x", expand=True)
 
-        self.warped_image = None
         self.exit_button = Button(
             self.window,
             text="Quit",
@@ -177,7 +215,7 @@ class FishMesh:
         #
         self.init_bounding_box(self.left_view)
         self.warp_image()
-        self.init_ruler(self.right_view)
+        # self.init_ruler(self.right_view)
         self.draw()
 
 
@@ -276,7 +314,7 @@ class FishMesh:
         if self.right_view.img is not None:
             self.draw_image(self.right_view)
             self.draw_ruler(self.right_view)
-            self.draw_ruler_measure()
+            # self.draw_ruler_measure()  # TODO: make it work with multiple rulers
 
 
     def resize_callback(self, event):
@@ -401,50 +439,88 @@ class FishMesh:
                 )
                 img_view.drawn_points.append(canvas_point)
 
-    def init_ruler(self, img_view):
-        # w = self.canvas.winfo_width()
-        # h = self.canvas.winfo_height()
-        left = Point(0, 0.50)
-        right = Point(0.50, 0.50)
-        img_view.points = [left, right]
+    # def init_ruler(self, img_view):
+    #     # w = self.canvas.winfo_width()
+    #     # h = self.canvas.winfo_height()
+    #     left = Point(0, 0.50)
+    #     right = Point(0.50, 0.50)
+    #     img_view.points = [left, right]
+    def draw_point(self, img_view: ImageView, point: Point, color=None):
+        w = img_view.resized_width
+        h = img_view.resized_height
+        _color = 'IndianRed1'
+        if point.color is not None:
+            _color = point.color
+        if color is not None:
+            _color = color
+        drawing = img_view.canvas.create_oval(
+            img_view.x_padding + int(w * point.x) - self.point_radii,
+            img_view.y_padding + int(h * point.y) - self.point_radii,
+            img_view.x_padding + int(w * point.x) + self.point_radii,
+            img_view.y_padding + int(h * point.y) + self.point_radii,
+            fill=_color
+        )
+        return drawing
 
     def draw_ruler(self, img_view):
         if img_view.points is None or len(img_view.points) == 0:
-            self.init_ruler(img_view)
+            # self.init_ruler(img_view)
+            return
+
         w = img_view.resized_width
         h = img_view.resized_height
 
-        # Draw the ruler's line
+        # find rulers:
+        rulers = {}
+        for p in img_view.points:
+            if p.ruler_id not in rulers:
+                rulers[p.ruler_id] = [p]
+            else:
+                rulers[p.ruler_id].append(p)
+
+        # Before drawing, delete existing liness:
         if img_view.drawn_lines:
             for line in img_view.drawn_lines:
                 img_view.canvas.delete(line)
-        img_view.drawn_lines = []
-        p1 = img_view.points[0]
-        p2 = img_view.points[1]
-        img_view.drawn_lines.append(img_view.canvas.create_line(
-            img_view.x_padding + (w * p1.x),
-            img_view.y_padding + (h * p1.y),
-            img_view.x_padding + (w * p2.x),
-            img_view.y_padding + (h * p2.y),
-            width=3,
-            fill="red"
-        ))
-
         # Delete the previously drawn points:
         if img_view.drawn_points:
             for drawn_corner in img_view.drawn_points:
                 img_view.canvas.delete(drawn_corner)
-        # Draw ruler points:
+        # Draw the ruler's line
+        img_view.drawn_lines = []
         img_view.drawn_points = []
-        for point in img_view.points:
-            canvas_point = img_view.canvas.create_oval(
-                img_view.x_padding + int(w * point.x) - self.point_radii,
-                img_view.y_padding + int(h * point.y) - self.point_radii,
-                img_view.x_padding + int(w * point.x) + self.point_radii,
-                img_view.y_padding + int(h * point.y) + self.point_radii,
-                fill='red'
+        for ruler in rulers.values():
+            p1 = ruler[0]
+            p2 = ruler[1]
+            # Draw line:
+            img_view.drawn_lines.append(img_view.canvas.create_line(
+                img_view.x_padding + (w * p1.x),
+                img_view.y_padding + (h * p1.y),
+                img_view.x_padding + (w * p2.x),
+                img_view.y_padding + (h * p2.y),
+                width=1,
+                fill=p1.color
+            ))
+            # Draw points:
+            drawn_point = img_view.canvas.create_oval(
+                img_view.x_padding + int(w * p1.x) - self.point_radii,
+                img_view.y_padding + int(h * p1.y) - self.point_radii,
+                img_view.x_padding + int(w * p1.x) + self.point_radii,
+                img_view.y_padding + int(h * p1.y) + self.point_radii,
+                fill=p1.color
             )
-            img_view.drawn_points.append(canvas_point)
+            p1.drawing_id = drawn_point
+            img_view.drawn_points.append(drawn_point)
+
+            drawn_point = img_view.canvas.create_oval(
+                img_view.x_padding + int(w * p2.x) - self.point_radii,
+                img_view.y_padding + int(h * p2.y) - self.point_radii,
+                img_view.x_padding + int(w * p2.x) + self.point_radii,
+                img_view.y_padding + int(h * p2.y) + self.point_radii,
+                fill=p2.color
+            )
+            p2.drawing_id = drawn_point
+            img_view.drawn_points.append(drawn_point)
 
     def read_ruler(self):
         points = self.right_view.points
@@ -461,68 +537,210 @@ class FishMesh:
         self.displayed_text = self.right_view.canvas.create_text(10, 10, text=text, fill="red", anchor=tk.NW, font=(None, 16))
 
 
-    def click_callback(self, img_view: ImageView, event):
+    def left_click_callback(self, img_view: ImageView, create_rulers_on_click: bool, event):
         x = event.x
         y = event.y
-        if img_view.drawn_points is not None:  # coreners must be drawn
-            closest = img_view.canvas.find_closest(x, y, halo=10, start=img_view.drawn_points)
-            selected_point_id = closest[0]
-            if selected_point_id in img_view.drawn_points:
-                img_view.dragging_point = True
-                # Delete selected point (it will be redrawn on the release position)
-                selected_point_idx = img_view.drawn_points.index(selected_point_id)
-                del img_view.points[selected_point_idx]  #img_view.points[selected_point_idx] = None
-                img_view.canvas.delete(selected_point_id)
-                img_view.drawn_points.remove(selected_point_id)
-                # Remove lines (this is easier than to draw lines for all points in the drag_callback)
-                if img_view.drawn_lines:
-                    for line in img_view.drawn_lines:
-                        img_view.canvas.delete(line)
+        x = max(img_view.x_padding, x)
+        y = max(img_view.y_padding, y)
+        x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
+        y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
+        drawn_points = img_view.drawn_points if img_view.drawn_points is not None else []
+        closest = img_view.canvas.find_closest(x, y, halo=10, start=drawn_points)
+        selected_point_id = closest[0]
+        if selected_point_id in drawn_points:
+            # img_view.dragging_point = True
+            # # Delete selected point (it will be redrawn on the release position)
+            # selected_point_idx = img_view.drawn_points.index(selected_point_id)
+            # del img_view.points[selected_point_idx]
+            # img_view.canvas.delete(selected_point_id)
+            # img_view.drawn_points.remove(selected_point_id)
+            # # Remove lines (this is easier than to draw lines for all points in the drag_callback)
+            # if img_view.drawn_lines:
+            #     for line in img_view.drawn_lines:
+            #         img_view.canvas.delete(line)
+
+            # create reference to point in img_view.points to easily adjust its position:
+            # Find the clicked point
+            selected_point_idx = img_view.drawn_points.index(selected_point_id)
+            self.dragged_point = img_view.points[selected_point_idx]
+            # Update dragged_point with click position (might be slightly off original position):
+            self.dragged_point.x = (x - img_view.x_padding) / img_view.resized_width
+            self.dragged_point.y = (y - img_view.y_padding) / img_view.resized_height
+            # First part of animation: removing it from original position to a position centered on mouse:
+            img_view.drawn_points.remove(selected_point_id)
+            #self.dragged_point.drawing_id = self.draw_point(img_view, self.dragged_point)
+            self.draw()
+        elif create_rulers_on_click:
+            if self.new_ruler_start_point is None:
+                # Add the released point:
+                rel_x = (x - img_view.x_padding) / img_view.resized_width
+                rel_y = (y - img_view.y_padding) / img_view.resized_height
+                self.new_ruler_start_point = Point(
+                    rel_x, rel_y, self.num_rulers_created + 1, colors[(self.num_rulers_created + 1) % len(colors)]
+                )
+                self.new_ruler_start_point.drawing_id = self.draw_point(img_view, self.new_ruler_start_point)
+            else:
+                rel_x = (x - img_view.x_padding) / img_view.resized_width
+                rel_y = (y - img_view.y_padding) / img_view.resized_height
+                self.num_rulers_created += 1
+                if img_view.points is None:
+                    img_view.points = []
+                img_view.points.extend([
+                    deepcopy(self.new_ruler_start_point),
+                    Point(
+                        rel_x, rel_y, self.num_rulers_created, colors[self.num_rulers_created % len(colors)]
+                    )
+                ])
+                img_view.canvas.delete(self.new_ruler_start_point.drawing_id)
+                img_view.canvas.delete(self.drawn_ruler_end)
+                img_view.canvas.delete(self.drawn_ruler_line)
+                self.drawn_ruler_end = None
+                self.drawn_ruler_line = None
+                self.new_ruler_start_point = None
+                self.draw()
+
 
     def drag_callback(self, img_view: ImageView, event):
         x = event.x
         y = event.y
 
         # make sure point isn't dragged outside canvas
-        x = max(0, x)
-        y = max(0, y)
-        x = min(img_view.canvas.winfo_width(), x)
-        y = min(img_view.canvas.winfo_height(), y)
+        x = max(img_view.x_padding, x)
+        y = max(img_view.y_padding, y)
+        x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
+        y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
 
-        if img_view.dragging_point:
-            if img_view.drawn_dragged_point:
-                img_view.canvas.delete(img_view.drawn_dragged_point)
-            img_view.drawn_dragged_point = img_view.canvas.create_oval(
-                # set point diagonal as 2% of monitor screen width
+        # if img_view.dragging_point:
+        #     if img_view.drawn_dragging_point:
+        #         img_view.canvas.delete(img_view.drawn_dragging_point)
+        #     img_view.drawn_dragging_point = img_view.canvas.create_oval(
+        #         # set point diagonal as 2% of monitor screen width
+        #         x - self.point_radii,
+        #         y - self.point_radii,
+        #         x + self.point_radii,
+        #         y + self.point_radii,
+        #         fill='IndianRed1'
+        #     )
+        if self.dragged_point is not None:
+            img_view.canvas.delete(self.dragged_point.drawing_id)
+            # Update dragged_point with click position to moving mouse:
+            self.dragged_point.x = (x - img_view.x_padding) / img_view.resized_width
+            self.dragged_point.y = (y - img_view.y_padding) / img_view.resized_height
+            #self.dragged_point.drawing_id = self.draw_point(img_view, self.dragged_point)
+            self.draw()
+
+    def release_callback(self, img_view: ImageView, event):
+        # if img_view.dragging_point:
+        #     x = event.x
+        #     y = event.y
+        #
+        #     # make sure point isn't dragged outside canvas
+        #     x = max(img_view.x_padding, x)
+        #     y = max(img_view.y_padding, y)
+        #     x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
+        #     y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
+        #
+        #     img_view.dragging_point = False  # On release we're no longer dragging the point
+        #     if img_view.drawn_dragging_point:
+        #         img_view.canvas.delete(img_view.drawn_dragging_point)
+        #     img_view.drawn_dragging_point = None
+        #     # Add the released point:
+        #     rel_x = (x - img_view.x_padding) / img_view.resized_width
+        #     rel_y = (y - img_view.y_padding) / img_view.resized_height
+        #     img_view.points.append(Point(rel_x, rel_y))  #img_view.points[img_view.points.index(None)] = Point(rel_x, rel_y)
+        #     self.warp_image()
+        #     self.draw()
+        if self.dragged_point is not None:
+            x = event.x
+            y = event.y
+            # make sure point isn't dragged outside canvas
+            x = max(img_view.x_padding, x)
+            y = max(img_view.y_padding, y)
+            x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
+            y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
+
+            img_view.canvas.delete(self.dragged_point.drawing_id)
+            # Update point with the release position:
+            self.dragged_point.x = (x - img_view.x_padding) / img_view.resized_width
+            self.dragged_point.y = (y - img_view.y_padding) / img_view.resized_height
+            self.dragged_point = None
+            self.warp_image()
+            self.draw()
+
+    def move_callback(self, img_view: ImageView, event):
+        if self.new_ruler_start_point is not None:
+            x = event.x
+            y = event.y
+
+            # make sure point isn't dragged outside canvas
+            x = max(img_view.x_padding, x)
+            y = max(img_view.y_padding, y)
+            x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
+            y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
+
+            img_view.canvas.delete(self.new_ruler_start_point.drawing_id)
+            start_x = self.new_ruler_start_point.x * img_view.resized_width + img_view.x_padding
+            start_y = self.new_ruler_start_point.y * img_view.resized_height + img_view.y_padding
+            self.new_ruler_start_point.drawing_id = img_view.canvas.create_oval(
+                start_x - self.point_radii,
+                start_y - self.point_radii,
+                start_x + self.point_radii,
+                start_y + self.point_radii,
+                fill=self.new_ruler_start_point.color
+            )
+            if self.drawn_ruler_end is not None:
+                img_view.canvas.delete(self.drawn_ruler_end)
+            self.drawn_ruler_end = img_view.canvas.create_oval(
                 x - self.point_radii,
                 y - self.point_radii,
                 x + self.point_radii,
                 y + self.point_radii,
-                fill='IndianRed1'
+                fill=self.new_ruler_start_point.color
+            )
+            if self.drawn_ruler_line is not None:
+                img_view.canvas.delete(self.drawn_ruler_line)
+            self.drawn_ruler_line = img_view.canvas.create_line(
+                start_x,
+                start_y,
+                x,
+                y,
+                fill=self.new_ruler_start_point.color
             )
 
-    def release_callback(self, img_view: ImageView, event):
+    def right_click_callback(self, img_view: ImageView, event):
         x = event.x
         y = event.y
-
-        # make sure point isn't dragged outside canvas
-        x = max(0, x)
-        y = max(0, y)
-        x = min(img_view.canvas.winfo_width(), x)
-        y = min(img_view.canvas.winfo_height(), y)
-
-        if img_view.dragging_point:
-            img_view.dragging_point = False  # On release we're no longer dragging the point
-            if img_view.drawn_dragged_point:
-                img_view.canvas.delete(img_view.drawn_dragged_point)
-            img_view.drawn_dragged_point = None
-
-            # Add the released point:
-            rel_x = (x - img_view.x_padding) / img_view.resized_width
-            rel_y = (y - img_view.y_padding) / img_view.resized_height
-            img_view.points.append(Point(rel_x, rel_y))  #img_view.points[img_view.points.index(None)] = Point(rel_x, rel_y)
-            self.warp_image()
-            self.draw()
+        if self.new_ruler_start_point is not None:
+            # if drawing a new ruler, cancel drawing the ruler
+            img_view.canvas.delete(self.new_ruler_start_point.drawing_id)
+            if self.drawn_ruler_end is not None:
+                img_view.canvas.delete(self.drawn_ruler_end)
+                self.drawn_ruler_end = None
+            if self.drawn_ruler_line is not None:
+                img_view.canvas.delete(self.drawn_ruler_line)
+                self.drawn_ruler_line = None
+            self.new_ruler_start_point = None
+        elif img_view.drawn_points is not None:
+            closest = img_view.canvas.find_closest(x, y, halo=10, start=img_view.drawn_points)
+            selected_point_id = closest[0]
+            if selected_point_id in img_view.drawn_points:
+                # Delete selected point (it will be redrawn on the release position)
+                selected_point_idx = img_view.drawn_points.index(selected_point_id)
+                selected_ruler_id = img_view.points[selected_point_idx].ruler_id
+                img_view.drawn_points.remove(selected_point_id)
+                img_view.canvas.delete(selected_point_id)
+                del img_view.points[selected_point_idx]
+                connected_point_idx = 0
+                for p in img_view.points:
+                    if p.ruler_id == selected_ruler_id:
+                        break
+                    connected_point_idx += 1
+                connected_point_drawing_id = img_view.points[connected_point_idx].drawing_id
+                img_view.drawn_points.remove(connected_point_drawing_id)
+                img_view.canvas.delete(connected_point_drawing_id)
+                del img_view.points[connected_point_idx]
+                # self.rulers.remove[selected_ruler_id]
+                self.draw()
 
     def warp_image(self):
         corners_ndarray = self.points_to_ndarray(self.left_view.points)
