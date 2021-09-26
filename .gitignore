@@ -1,4 +1,5 @@
 .idea/
 experimental-local/
+example_images/
 venv/
 __pycache__/

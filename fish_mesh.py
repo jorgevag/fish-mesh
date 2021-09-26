@@ -1,18 +1,16 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 from tkinter import *
 from tkinter import filedialog
 from PIL import ImageTk, Image
 import cv2.cv2 as cv2
 from pathlib import Path
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import numpy as np
 from functools import partial
 from copy import deepcopy
 
 import tkinter as tk
 from tkinter import ttk
-
-# from colors import colors
 
 """
 TODO 
@@ -27,26 +25,34 @@ TODO
       * if not drawling_ruler and sufficiently close to point: delete ruler related to point (delete both points and line)
 """
 
-colors = [
-    "red",
-    "green",
-    "blue",
-    "orange",
-    "magenta",
-    "brown",
-    "gray",
-    "yellow green",
-    "blue violet",
-    "cornflower blue",
-    "dark orange",
-    "cyan",
-    "coral",
-    "gold",
-    "hot pink",
-    "green yellow",
-    "maroon",
-    "purple"
-]
+@dataclass
+class FishMeshSettings:
+    measure_box_width = 42.0
+    measure_box_height = 29.6
+    font_size = 16
+    point_size_relative_to_monitor_width = 0.0025
+    colors: List[str] = field(
+        default_factory=lambda: [
+            "red",
+            "green",
+            "blue",
+            "orange",
+            "magenta",
+            "brown",
+            "gray",
+            "yellow green",
+            "blue violet",
+            "cornflower blue",
+            "dark orange",
+            "cyan",
+            "coral",
+            "gold",
+            "hot pink",
+            "green yellow",
+            "maroon",
+            "purple"
+        ]
+    )
 
 @dataclass
 class FileExplorer:
@@ -77,8 +83,6 @@ class ImageView:
     drawn_points = None
     lines = None
     drawn_lines = None
-    # dragging_point = False       # TODO: consider if these should be tied to FishMesh (since you can only click on one view at a time, so they should maybe be "global" to the program
-    # drawn_dragging_point = None  # TODO: consider if these should be tied to FishMesh (since you can only click on one view at a time, so they should maybe be "global" to the program
 
 @dataclass
 class Point:
@@ -89,17 +93,28 @@ class Point:
     drawing_id: Optional[int] = None
 
 @dataclass
-class BoundingBoxDrawer:
-    img_viewer = None # contains canvas that points should be drawn on
-    # and the canvas to add the drawing callbacks to
-    corners = []
-    drawn_corner_ids = []
+class Ruler:
+    id: int  # non-visual internal id
+    label: int  # visual/final id
+    label_x: int  # label x pos
+    label_y: int  # label y pos
+    points: List[Point]
+    length: float
+
+
+# @dataclass
+# class BoundingBoxDrawer:
+#     img_viewer = None # contains canvas that points should be drawn on
+#     # and the canvas to add the drawing callbacks to
+#     corners = []
+#     drawn_corner_ids = []
 
 # Where do I put cv2_image and loading??
 
 
 class FishMesh:
-    def __init__(self):
+    def __init__(self, settings: Optional[FishMeshSettings] = None):
+        self.settings: FishMeshSettings = settings if settings is not None else FishMeshSettings()
         # Init tkinter window:
         self.window = tk.Tk()
         self.window.title('File Explorer')
@@ -108,7 +123,9 @@ class FishMesh:
         self.window.geometry(f"{self.window.winfo_screenwidth()}x{self.window.winfo_screenheight()}")
 
         screen_width = self.window.winfo_screenwidth()
-        self.point_radii = int(0.005 * screen_width)  # Make point sizes 1 % of monitor width
+        self.point_radii = int(
+            self.settings.point_size_relative_to_monitor_width * screen_width
+        )  # Make point sizes a percentage of the monitor width
 
         file_explorer = FileExplorer()
         file_explorer.button = Button(
@@ -128,7 +145,6 @@ class FishMesh:
         self.file_explorer: FileExplorer = file_explorer
 
         self.img = None
-        self.displayed_text = None
         self.warped_image = None
 
         self.dragged_point: Optional[Point] = None
@@ -138,6 +154,7 @@ class FishMesh:
         self.drawn_ruler_line = None
         self.num_rulers_created = 0
         self.rulers = []
+        self.drawn_ruler_labels = []
 
         self.image_displays = tk.Frame(self.window)
         self.image_displays.pack(fill="both", expand=True)
@@ -313,8 +330,10 @@ class FishMesh:
 
         if self.right_view.img is not None:
             self.draw_image(self.right_view)
-            self.draw_ruler(self.right_view)
-            # self.draw_ruler_measure()  # TODO: make it work with multiple rulers
+            if self.right_view.points:
+                ruler_point_map = self.create_ruler_point_mapping(self.right_view)
+                self.draw_rulers(self.right_view, ruler_point_map)
+                self.draw_ruler_labels(ruler_point_map)
 
 
     def resize_callback(self, event):
@@ -388,9 +407,24 @@ class FishMesh:
     def run(self):
         self.window.mainloop()
 
+    def draw_point(self, img_view: ImageView, point: Point, color=None):
+        w = img_view.resized_width
+        h = img_view.resized_height
+        _color = 'IndianRed1'
+        if point.color is not None:
+            _color = point.color
+        if color is not None:
+            _color = color
+        drawing = img_view.canvas.create_oval(
+            img_view.x_padding + int(w * point.x) - self.point_radii,
+            img_view.y_padding + int(h * point.y) - self.point_radii,
+            img_view.x_padding + int(w * point.x) + self.point_radii,
+            img_view.y_padding + int(h * point.y) + self.point_radii,
+            fill=_color
+        )
+        return drawing
+
     def init_bounding_box(self, img_view):
-        # w = self.canvas.winfo_width()
-        # h = self.canvas.winfo_height()
         top_left = Point(0.20, 0.20)
         bottom_left = Point(0.20, 0.80)
         bottom_right = Point(0.80, 0.80)
@@ -439,30 +473,29 @@ class FishMesh:
                 )
                 img_view.drawn_points.append(canvas_point)
 
+    # # # # # # # #
+    # Draw Rulers #
+    # # # # # # # #
+    def create_ruler_point_mapping(self, img_view) -> Dict[int, List[Point]]:
+        """
+        Generate a mapping from ruler_id to points,
+        using the point's ruler_id field.
+        """
+        rulers: Dict[int, List[Point]] = {}
+        for p in img_view.points:
+            if p.ruler_id not in rulers:
+                rulers[p.ruler_id] = [p]
+            else:
+                rulers[p.ruler_id].append(p)
+        return rulers
+
     # def init_ruler(self, img_view):
     #     # w = self.canvas.winfo_width()
     #     # h = self.canvas.winfo_height()
     #     left = Point(0, 0.50)
     #     right = Point(0.50, 0.50)
     #     img_view.points = [left, right]
-    def draw_point(self, img_view: ImageView, point: Point, color=None):
-        w = img_view.resized_width
-        h = img_view.resized_height
-        _color = 'IndianRed1'
-        if point.color is not None:
-            _color = point.color
-        if color is not None:
-            _color = color
-        drawing = img_view.canvas.create_oval(
-            img_view.x_padding + int(w * point.x) - self.point_radii,
-            img_view.y_padding + int(h * point.y) - self.point_radii,
-            img_view.x_padding + int(w * point.x) + self.point_radii,
-            img_view.y_padding + int(h * point.y) + self.point_radii,
-            fill=_color
-        )
-        return drawing
-
-    def draw_ruler(self, img_view):
+    def draw_rulers(self, img_view, ruler_point_map: Dict[int, List[Point]]):
         if img_view.points is None or len(img_view.points) == 0:
             # self.init_ruler(img_view)
             return
@@ -470,15 +503,7 @@ class FishMesh:
         w = img_view.resized_width
         h = img_view.resized_height
 
-        # find rulers:
-        rulers = {}
-        for p in img_view.points:
-            if p.ruler_id not in rulers:
-                rulers[p.ruler_id] = [p]
-            else:
-                rulers[p.ruler_id].append(p)
-
-        # Before drawing, delete existing liness:
+        # Before drawing, delete existing lines:
         if img_view.drawn_lines:
             for line in img_view.drawn_lines:
                 img_view.canvas.delete(line)
@@ -489,9 +514,9 @@ class FishMesh:
         # Draw the ruler's line
         img_view.drawn_lines = []
         img_view.drawn_points = []
-        for ruler in rulers.values():
-            p1 = ruler[0]
-            p2 = ruler[1]
+        for ruler_points in ruler_point_map.values():
+            p1 = ruler_points[0]
+            p2 = ruler_points[1]
             # Draw line:
             img_view.drawn_lines.append(img_view.canvas.create_line(
                 img_view.x_padding + (w * p1.x),
@@ -522,19 +547,106 @@ class FishMesh:
             p2.drawing_id = drawn_point
             img_view.drawn_points.append(drawn_point)
 
-    def read_ruler(self):
-        points = self.right_view.points
-        p1 = points[0]
-        p2 = points[1]
-        return np.sqrt((p1.x - p2.x)**2 + (p1.y - p2.y)**2)
+    def find_ruler_label_position(self, ruler_point_map: Dict[int, List[Point]]):
+        """
+        Find where to place ruler labels.
+        For simplicity, the label is placed on the side of the ruler closest to the
+        image center (this assumes the fish to be laid down along the edge of the box).
+        If the line is closest to horizontal, draw label left/right of inner point.
+        if the line is closest to vertical, draw label over/under of inner point.
+        """
+        # w = self.right_view.canvas.winfo_width()
+        # h = self.right_view.canvas.winfo_height()
+        ruler_label_position = {}
+        for i, (ruler_id, ruler_points) in enumerate(ruler_point_map.items()):
+            p1 = ruler_points[0]
+            p2 = ruler_points[1]
+            dx = p2.x - p1.x
+            dy = p2.y - p1.y
+            vertically_aligned = abs(dy) > abs(dx)  # def: line with slope higher than 45 deg
+            label_placement = "unknown"
+            if vertically_aligned:
+                # The point used for labeling will the the one closest to the image center:
+                p1_above_p2 = dy >= 0
+                p1_below_p2 = dy < 0
+                if abs(p1.y - 0.5) <= abs(p2.y - 0.5):
+                    label_point = deepcopy(p1)
+                    if p1_above_p2:
+                        label_placement = "over"
+                    elif p1_below_p2:
+                        label_placement = "under"
+                else:
+                    label_point = deepcopy(p2)
+                    if p1_above_p2:
+                        label_placement = "under"
+                    elif p1_below_p2:
+                        label_placement = "over"
+            else:  # horizontally aligned
+                p1_left_of_p2 = dx >= 0
+                p1_right_of_p2 = dx < 0
+                if abs(p1.x - 0.5) <= abs(p2.x - 0.5):
+                    label_point = deepcopy(p1)
+                    if p1_left_of_p2:
+                        label_placement = "left"
+                    elif p1_right_of_p2:
+                        label_placement = "right"
+                else:
+                    label_point = deepcopy(p2)
+                    if p1_left_of_p2:
+                        label_placement = "right"
+                    elif p1_right_of_p2:
+                        label_placement = "left"
 
-    def draw_ruler_measure(self):
-        ruler_length = self.read_ruler()
-        ruler_percentage_length = ruler_length * 100
-        text = f"relative length: {ruler_percentage_length:.2f} %"
-        if self.displayed_text is not None:
-            self.right_view.canvas.delete(self.displayed_text)
-        self.displayed_text = self.right_view.canvas.create_text(10, 10, text=text, fill="red", anchor=tk.NW, font=(None, 16))
+            x = label_point.x * self.right_view.resized_width + self.right_view.x_padding
+            y = label_point.y * self.right_view.resized_height + self.right_view.y_padding
+            if label_placement == "over":
+                # TODO: maybe used max(font_size, point_radii) * 3 as distance measure to place text relative to point
+                y -= self.point_radii * 3
+            elif label_placement == "under":
+                y += self.point_radii * 3
+            elif label_placement == "left":
+                x -= self.point_radii * 3
+            elif label_placement == "right":
+                x += self.point_radii * 3
+            else:
+                raise RuntimeError(
+                    f"Unable to find 'label_placement' for ruler {ruler_id} (color: {p1.color})"
+                )
+            ruler_label_position[ruler_id] = (x, y)
+        return ruler_label_position
+
+    def read_rulers(self, ruler_point_map: Dict[int, List[Point]]):
+        # find rulers:
+        ruler_values = {}
+        for ruler_id, ruler_points in ruler_point_map.items():
+            p1 = ruler_points[0]
+            p2 = ruler_points[1]
+            ruler_values[ruler_id] = np.sqrt(
+                (self.settings.measure_box_width * (p1.x - p2.x)) ** 2
+                + (self.settings.measure_box_height * (p1.y - p2.y)) ** 2
+            )
+        return ruler_values
+
+    def draw_ruler_labels(self, ruler_point_map: Dict[int, List[Point]]):
+        """
+        draw ruler labels with the measurement
+        """
+        label_positions = self.find_ruler_label_position(ruler_point_map)
+        ruler_values = self.read_rulers(ruler_point_map)
+        #ruler_percentage_length = ruler_length * 100
+        #text = f"relative length: {ruler_percentage_length:.2f} %"
+        if self.drawn_ruler_labels:
+            for label in self.drawn_ruler_labels:
+                self.right_view.canvas.delete(label)
+        for i, ruler_id in enumerate(ruler_point_map.keys()):
+            x, y = label_positions[ruler_id]
+            value = ruler_values[ruler_id]
+            color = ruler_point_map[ruler_id][0].color
+            # self.right_view.canvas.create_text(10, 10, text=text, fill="red", anchor=tk.NW, font=(None, 16))
+            drawn_label = self.right_view.canvas.create_text(
+                x, y, text=f"{i + 1}: {value:.2f} cm", fill=color, anchor=tk.NW, font=(None, self.settings.font_size)
+            )
+            self.drawn_ruler_labels.append(drawn_label)
 
 
     def left_click_callback(self, img_view: ImageView, create_rulers_on_click: bool, event):
@@ -544,6 +656,12 @@ class FishMesh:
         y = max(img_view.y_padding, y)
         x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
         y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
+
+        # Hack: tkinter doesn't allow to separate drawn canvas types.
+        #       solution: delete drawn text when clicking points:
+        for label in self.drawn_ruler_labels:
+            img_view.canvas.delete(label)
+
         drawn_points = img_view.drawn_points if img_view.drawn_points is not None else []
         closest = img_view.canvas.find_closest(x, y, halo=10, start=drawn_points)
         selected_point_id = closest[0]
@@ -576,7 +694,7 @@ class FishMesh:
                 rel_x = (x - img_view.x_padding) / img_view.resized_width
                 rel_y = (y - img_view.y_padding) / img_view.resized_height
                 self.new_ruler_start_point = Point(
-                    rel_x, rel_y, self.num_rulers_created + 1, colors[(self.num_rulers_created + 1) % len(colors)]
+                    rel_x, rel_y, self.num_rulers_created + 1, self.settings.colors[(self.num_rulers_created + 1) % len(self.settings.colors)]
                 )
                 self.new_ruler_start_point.drawing_id = self.draw_point(img_view, self.new_ruler_start_point)
             else:
@@ -588,7 +706,7 @@ class FishMesh:
                 img_view.points.extend([
                     deepcopy(self.new_ruler_start_point),
                     Point(
-                        rel_x, rel_y, self.num_rulers_created, colors[self.num_rulers_created % len(colors)]
+                        rel_x, rel_y, self.num_rulers_created, self.settings.colors[self.num_rulers_created % len(self.settings.colors)]
                     )
                 ])
                 img_view.canvas.delete(self.new_ruler_start_point.drawing_id)
@@ -626,30 +744,9 @@ class FishMesh:
             # Update dragged_point with click position to moving mouse:
             self.dragged_point.x = (x - img_view.x_padding) / img_view.resized_width
             self.dragged_point.y = (y - img_view.y_padding) / img_view.resized_height
-            #self.dragged_point.drawing_id = self.draw_point(img_view, self.dragged_point)
             self.draw()
 
     def release_callback(self, img_view: ImageView, event):
-        # if img_view.dragging_point:
-        #     x = event.x
-        #     y = event.y
-        #
-        #     # make sure point isn't dragged outside canvas
-        #     x = max(img_view.x_padding, x)
-        #     y = max(img_view.y_padding, y)
-        #     x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
-        #     y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
-        #
-        #     img_view.dragging_point = False  # On release we're no longer dragging the point
-        #     if img_view.drawn_dragging_point:
-        #         img_view.canvas.delete(img_view.drawn_dragging_point)
-        #     img_view.drawn_dragging_point = None
-        #     # Add the released point:
-        #     rel_x = (x - img_view.x_padding) / img_view.resized_width
-        #     rel_y = (y - img_view.y_padding) / img_view.resized_height
-        #     img_view.points.append(Point(rel_x, rel_y))  #img_view.points[img_view.points.index(None)] = Point(rel_x, rel_y)
-        #     self.warp_image()
-        #     self.draw()
         if self.dragged_point is not None:
             x = event.x
             y = event.y
@@ -721,6 +818,11 @@ class FishMesh:
                 self.drawn_ruler_line = None
             self.new_ruler_start_point = None
         elif img_view.drawn_points is not None:
+            # Hack: tkinter doesn't allow to separate drawn canvas types.
+            #       solution: delete drawn text when clicking points:
+            for label in self.drawn_ruler_labels:
+                img_view.canvas.delete(label)
+
             closest = img_view.canvas.find_closest(x, y, halo=10, start=img_view.drawn_points)
             selected_point_id = closest[0]
             if selected_point_id in img_view.drawn_points:
