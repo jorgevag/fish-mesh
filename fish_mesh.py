@@ -1,3 +1,4 @@
+from sys import exit
 from typing import List, Optional, Dict
 from tkinter import *
 from tkinter import filedialog
@@ -650,72 +651,73 @@ class FishMesh:
 
 
     def left_click_callback(self, img_view: ImageView, create_rulers_on_click: bool, event):
-        x = event.x
-        y = event.y
-        x = max(img_view.x_padding, x)
-        y = max(img_view.y_padding, y)
-        x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
-        y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
+        if img_view.canvas_img is not None:
+            x = event.x
+            y = event.y
+            x = max(img_view.x_padding, x)
+            y = max(img_view.y_padding, y)
+            x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
+            y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
 
-        # Hack: tkinter doesn't allow to separate drawn canvas types.
-        #       solution: delete drawn text when clicking points:
-        for label in self.drawn_ruler_labels:
-            img_view.canvas.delete(label)
+            # Hack: tkinter doesn't allow to separate drawn canvas types.
+            #       solution: delete drawn text when clicking points:
+            for label in self.drawn_ruler_labels:
+                img_view.canvas.delete(label)
 
-        drawn_points = img_view.drawn_points if img_view.drawn_points is not None else []
-        closest = img_view.canvas.find_closest(x, y, halo=10, start=drawn_points)
-        selected_point_id = closest[0]
-        if selected_point_id in drawn_points:
-            # img_view.dragging_point = True
-            # # Delete selected point (it will be redrawn on the release position)
-            # selected_point_idx = img_view.drawn_points.index(selected_point_id)
-            # del img_view.points[selected_point_idx]
-            # img_view.canvas.delete(selected_point_id)
-            # img_view.drawn_points.remove(selected_point_id)
-            # # Remove lines (this is easier than to draw lines for all points in the drag_callback)
-            # if img_view.drawn_lines:
-            #     for line in img_view.drawn_lines:
-            #         img_view.canvas.delete(line)
+            drawn_points = img_view.drawn_points if img_view.drawn_points is not None else []
+            closest = img_view.canvas.find_closest(x, y, halo=10, start=drawn_points)
+            selected_point_id = closest[0]
+            if selected_point_id in drawn_points:
+                # img_view.dragging_point = True
+                # # Delete selected point (it will be redrawn on the release position)
+                # selected_point_idx = img_view.drawn_points.index(selected_point_id)
+                # del img_view.points[selected_point_idx]
+                # img_view.canvas.delete(selected_point_id)
+                # img_view.drawn_points.remove(selected_point_id)
+                # # Remove lines (this is easier than to draw lines for all points in the drag_callback)
+                # if img_view.drawn_lines:
+                #     for line in img_view.drawn_lines:
+                #         img_view.canvas.delete(line)
 
-            # create reference to point in img_view.points to easily adjust its position:
-            # Find the clicked point
-            selected_point_idx = img_view.drawn_points.index(selected_point_id)
-            self.dragged_point = img_view.points[selected_point_idx]
-            # Update dragged_point with click position (might be slightly off original position):
-            self.dragged_point.x = (x - img_view.x_padding) / img_view.resized_width
-            self.dragged_point.y = (y - img_view.y_padding) / img_view.resized_height
-            # First part of animation: removing it from original position to a position centered on mouse:
-            img_view.drawn_points.remove(selected_point_id)
-            #self.dragged_point.drawing_id = self.draw_point(img_view, self.dragged_point)
-            self.draw()
-        elif create_rulers_on_click:
-            if self.new_ruler_start_point is None:
-                # Add the released point:
-                rel_x = (x - img_view.x_padding) / img_view.resized_width
-                rel_y = (y - img_view.y_padding) / img_view.resized_height
-                self.new_ruler_start_point = Point(
-                    rel_x, rel_y, self.num_rulers_created + 1, self.settings.colors[(self.num_rulers_created + 1) % len(self.settings.colors)]
-                )
-                self.new_ruler_start_point.drawing_id = self.draw_point(img_view, self.new_ruler_start_point)
-            else:
-                rel_x = (x - img_view.x_padding) / img_view.resized_width
-                rel_y = (y - img_view.y_padding) / img_view.resized_height
-                self.num_rulers_created += 1
-                if img_view.points is None:
-                    img_view.points = []
-                img_view.points.extend([
-                    deepcopy(self.new_ruler_start_point),
-                    Point(
-                        rel_x, rel_y, self.num_rulers_created, self.settings.colors[self.num_rulers_created % len(self.settings.colors)]
-                    )
-                ])
-                img_view.canvas.delete(self.new_ruler_start_point.drawing_id)
-                img_view.canvas.delete(self.drawn_ruler_end)
-                img_view.canvas.delete(self.drawn_ruler_line)
-                self.drawn_ruler_end = None
-                self.drawn_ruler_line = None
-                self.new_ruler_start_point = None
+                # create reference to point in img_view.points to easily adjust its position:
+                # Find the clicked point
+                selected_point_idx = img_view.drawn_points.index(selected_point_id)
+                self.dragged_point = img_view.points[selected_point_idx]
+                # Update dragged_point with click position (might be slightly off original position):
+                self.dragged_point.x = (x - img_view.x_padding) / img_view.resized_width
+                self.dragged_point.y = (y - img_view.y_padding) / img_view.resized_height
+                # First part of animation: removing it from original position to a position centered on mouse:
+                img_view.drawn_points.remove(selected_point_id)
+                #self.dragged_point.drawing_id = self.draw_point(img_view, self.dragged_point)
                 self.draw()
+            elif create_rulers_on_click:
+                if self.new_ruler_start_point is None:
+                    # Add the released point:
+                    rel_x = (x - img_view.x_padding) / img_view.resized_width
+                    rel_y = (y - img_view.y_padding) / img_view.resized_height
+                    self.new_ruler_start_point = Point(
+                        rel_x, rel_y, self.num_rulers_created + 1, self.settings.colors[(self.num_rulers_created + 1) % len(self.settings.colors)]
+                    )
+                    self.new_ruler_start_point.drawing_id = self.draw_point(img_view, self.new_ruler_start_point)
+                else:
+                    rel_x = (x - img_view.x_padding) / img_view.resized_width
+                    rel_y = (y - img_view.y_padding) / img_view.resized_height
+                    self.num_rulers_created += 1
+                    if img_view.points is None:
+                        img_view.points = []
+                    img_view.points.extend([
+                        deepcopy(self.new_ruler_start_point),
+                        Point(
+                            rel_x, rel_y, self.num_rulers_created, self.settings.colors[self.num_rulers_created % len(self.settings.colors)]
+                        )
+                    ])
+                    img_view.canvas.delete(self.new_ruler_start_point.drawing_id)
+                    img_view.canvas.delete(self.drawn_ruler_end)
+                    img_view.canvas.delete(self.drawn_ruler_line)
+                    self.drawn_ruler_end = None
+                    self.drawn_ruler_line = None
+                    self.new_ruler_start_point = None
+                    self.draw()
 
 
     def drag_callback(self, img_view: ImageView, event):

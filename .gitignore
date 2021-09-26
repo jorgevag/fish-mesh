@@ -2,4 +2,7 @@
 experimental-local/
 example_images/
 venv/
+venv3.9/
+pyinstaller/
 __pycache__/
+FishMesh.exe

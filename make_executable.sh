@@ -1,2 +1,5 @@
-# TODO: move to a subfolder which is gitignored, since this generates a lot of files
-pyinstaller experimental/file_explorer.py --onefile
+#!/bin/bash
+cd pyinstaller
+pyinstaller ../fish_mesh.py --onefile --name FishMesh.exe --hidden-import='PIL._tkinter_finder'
+mv dist/FishMesh.exe ..
+cd ..
