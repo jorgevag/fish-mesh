@@ -216,14 +216,12 @@ class FishMesh:
         )
         self.rotate_clockwise_button.pack(side=RIGHT, fill="x", expand=True)
 
-        self.exit_button = Button(
+        self.save_button = Button(
             self.window,
-            text="Quit",
-            command=exit,
+            text="Save",
+            command=self.save_callback,
             bg="white",
         )
-        #self.exit_button = ttk.Button(self.window, text="Quit")
-        #self.exit_button['command'] = self.window.destroy
         self.exit_button.pack(fill="x")
 
 
@@ -309,7 +307,7 @@ class FishMesh:
         # Get x,y position to center image drawn on canvas using anchor to NW
         x = (img_view.canvas.winfo_width() - img_view.resized_width) // 2
         y = (img_view.canvas.winfo_height() - img_view.resized_height) // 2
-        img_view.canvas_img = img_view.canvas.create_image(x, y, image=img_view.resized_img, anchor=tk.NW)  # TODO: should i delete the previous image on canbas? (not sure I'm using this variable at all)
+        img_view.canvas_img = img_view.canvas.create_image(x, y, image=img_view.resized_img, anchor=tk.NW)  # TODO: should i delete the previous image on canvas? (not sure I'm using this variable at all)
         # The position is equal to the "padding" (on one side) required to preserve aspect ratio
         img_view.x_padding = x
         img_view.y_padding = y
@@ -353,6 +351,9 @@ class FishMesh:
         self.init_bounding_box(self.left_view)  # redraw box since it is hard to rotate points
         self.warp_image()
         self.draw()
+
+    def save_callback(self):
+        pass
 
     # def rotate_points(self, direction: str):
     #     """
