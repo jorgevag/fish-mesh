@@ -2,13 +2,17 @@ from sys import exit
 from typing import List, Optional, Dict
 from tkinter import *
 from tkinter import filedialog
-from PIL import ImageTk, Image
-import cv2.cv2 as cv2
 from pathlib import Path
 from dataclasses import dataclass, field
 import numpy as np
 from functools import partial
 from copy import deepcopy
+import uuid
+
+from exif import Image as ExifImage
+import cv2.cv2 as cv2
+from PIL import ImageTk, Image, ImageGrab
+from pandas import DataFrame
 
 import tkinter as tk
 from tkinter import ttk
@@ -54,12 +58,6 @@ class FishMeshSettings:
             "purple"
         ]
     )
-
-@dataclass
-class FileExplorer:
-    button = None
-    selected_file: Optional[tk.StringVar] = None
-    selected_file_label: Optional[tk.Label] = None
 
 @dataclass
 class Data:
@@ -128,25 +126,17 @@ class FishMesh:
             self.settings.point_size_relative_to_monitor_width * screen_width
         )  # Make point sizes a percentage of the monitor width
 
-        file_explorer = FileExplorer()
-        file_explorer.button = Button(
+        self.input_file_explorer_button = Button(
             self.window,
             bg="white",
             text="Browse Files",
-            command=self.load_selected_file,
+            command=self.select_and_load_file,
         )
-        file_explorer.button.pack()
-        file_explorer.selected_file = tk.StringVar()
-        file_explorer.selected_file_label = Label(
-            self.window,
-            text="No file selected",
-            bg="white",
-        )
-        file_explorer.selected_file_label.pack()
-        self.file_explorer: FileExplorer = file_explorer
+        self.input_file_explorer_button.pack()
 
         self.img = None
         self.warped_image = None
+        self.output_dir = None
 
         self.dragged_point: Optional[Point] = None
 
@@ -154,7 +144,7 @@ class FishMesh:
         self.drawn_ruler_end = None
         self.drawn_ruler_line = None
         self.num_rulers_created = 0
-        self.rulers = []
+        # self.rulers = []
         self.drawn_ruler_labels = []
 
         self.image_displays = tk.Frame(self.window)
@@ -166,21 +156,6 @@ class FishMesh:
         self.right_view.canvas = Canvas(self.image_displays, width=0, height=0, bg="white")
         self.right_view.canvas.pack(side=RIGHT, fill="both", expand=True)
         self.window.bind('<Configure>', self.resize_callback)
-        # # # # # #
-        # # This one works (but doesn't include additional canvas):
-        # self.left_view = ImageView()
-        # self.left_view.canvas = Canvas(self.window, width=0, height=0, bg="white")
-        # self.left_view.canvas.pack(fill="both", expand=True)
-        # self.right_view = ImageView()
-        # self.window.bind('<Configure>', self.resize_callback)
-        # # # # # #
-        # self.left_view = ImageView()
-        # self.left_view.canvas = Canvas(self.window, width=0, height=0, bg="white")
-        # self.left_view.canvas.pack(expand=True)
-        # self.right_view = ImageView()
-        # self.right_view.canvas = Canvas(self.window, width=0, height=0, bg="white")
-        # self.right_view.canvas.pack(expand=True)
-        # self.window.bind('<Configure>', self.resize_callback)
 
         """
         mouse-button  click      hold&move    release
@@ -196,7 +171,8 @@ class FishMesh:
         self.right_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.right_view))
         self.right_view.canvas.bind("<ButtonRelease-1>", partial(self.release_callback, self.right_view))
         self.right_view.canvas.bind("<Motion>", partial(self.move_callback, self.right_view))
-        #self.right_view.canvas.bind("<Button-2>", partial(self.right_click_callback, self.right_view))
+        # button 2 and 3 (middle and right) might vary from OS, so assign both:
+        self.right_view.canvas.bind("<Button-2>", partial(self.right_click_callback, self.right_view))
         self.right_view.canvas.bind("<Button-3>", partial(self.right_click_callback, self.right_view))
 
         self.rotate_buttons_frame = tk.Frame(self.window)
@@ -216,29 +192,38 @@ class FishMesh:
         )
         self.rotate_clockwise_button.pack(side=RIGHT, fill="x", expand=True)
 
+        self.save_buttons_frame = tk.Frame(self.window)
+        self.save_buttons_frame.pack(fill="x")
+        output_file_explorer_button = Button(
+            self.save_buttons_frame,
+            bg="white",
+            text="Save to",
+            command=self.choose_output_dir,
+
+        )
+        output_file_explorer_button.pack(side=LEFT, fill="x", expand=True)
         self.save_button = Button(
-            self.window,
+            self.save_buttons_frame,
             text="Save",
             command=self.save_callback,
             bg="white",
         )
-        self.exit_button.pack(fill="x")
+        self.save_button.pack(side=RIGHT, fill="x", expand=True)
 
 
-    def load_selected_file(self):
-        self.select_file()
-        self.load_image()
-        #
+    def select_and_load_file(self):
+        selected_file = self.select_file()
+        self.img = self.load_image(selected_file)
+
+        # After file has loaded, show image, and draw initial bounding box and warped image
         self.init_bounding_box(self.left_view)
         self.warp_image()
-        # self.init_ruler(self.right_view)
         self.draw()
 
 
     def select_file(self):
         """opening file explorer window"""
-        filename = filedialog.askopenfilename(
-            #initialdir="/",
+        self.selected_input_file = filedialog.askopenfilename(
             initialdir=Path.cwd().__str__(),
             title="Select a File",
             filetypes=(
@@ -246,18 +231,22 @@ class FishMesh:
                 ("Text files", "*.txt*"),
             )
         )
-        self.file_explorer.selected_file.set(filename)
-        # Show selected file
-        self.file_explorer.selected_file_label.configure(text="Selected File: " + filename)
+        return self.selected_input_file
 
-    def load_image(self):
-        img_array_BGR = cv2.imread(self.file_explorer.selected_file.get())
+    def choose_output_dir(self):
+        self.output_dir = filedialog.askdirectory(
+            initialdir=Path.cwd().__str__(),
+            title="Select an output directory/folder",
+        )
+        return self.output_dir
+
+    def load_image(self, image_file):
+        img_array_BGR = cv2.imread(image_file)
 
         # OpenCV uses BGR color, but PIL expects RGB, so we need to convert image's color to RGB order
         img_array_RGB = cv2.cvtColor(img_array_BGR, cv2.COLOR_BGR2RGB)
 
-        # https://stackoverflow.com/questions/19838972/how-to-update-an-image-on-a-canvas/19842646
-        self.img = img_array_RGB
+        return img_array_RGB
 
     def resize_views(self):
         if self.left_view.img is not None:
@@ -351,9 +340,6 @@ class FishMesh:
         self.init_bounding_box(self.left_view)  # redraw box since it is hard to rotate points
         self.warp_image()
         self.draw()
-
-    def save_callback(self):
-        pass
 
     # def rotate_points(self, direction: str):
     #     """
@@ -549,16 +535,16 @@ class FishMesh:
             p2.drawing_id = drawn_point
             img_view.drawn_points.append(drawn_point)
 
-    def find_ruler_label_position(self, ruler_point_map: Dict[int, List[Point]]):
+    def find_ruler_label_position(self, ruler_point_map: Dict[int, List[Point]], coordinates_type: str = "canvas"):
         """
         Find where to place ruler labels.
         For simplicity, the label is placed on the side of the ruler closest to the
         image center (this assumes the fish to be laid down along the edge of the box).
         If the line is closest to horizontal, draw label left/right of inner point.
         if the line is closest to vertical, draw label over/under of inner point.
+
+        :coordinates_type: "canvas" | "full_image"
         """
-        # w = self.right_view.canvas.winfo_width()
-        # h = self.right_view.canvas.winfo_height()
         ruler_label_position = {}
         for i, (ruler_id, ruler_points) in enumerate(ruler_point_map.items()):
             p1 = ruler_points[0]
@@ -599,8 +585,17 @@ class FishMesh:
                     elif p1_right_of_p2:
                         label_placement = "left"
 
-            x = label_point.x * self.right_view.resized_width + self.right_view.x_padding
-            y = label_point.y * self.right_view.resized_height + self.right_view.y_padding
+            if coordinates_type == "canvas":
+                x = label_point.x * self.right_view.resized_width + self.right_view.x_padding
+                y = label_point.y * self.right_view.resized_height + self.right_view.y_padding
+            elif coordinates_type == "full_image":
+                # For drawing rulers and labels when saving the image.
+                img_width = self.img.shape[1]
+                img_height = self.img.shape[0]
+                x = label_point.x * img_width
+                y = label_point.y * img_height
+            else:
+                raise ValueError(f"Received unknown coordinate_type: '{coordinates_type}'")
             if label_placement == "over":
                 # TODO: maybe used max(font_size, point_radii) * 3 as distance measure to place text relative to point
                 y -= self.point_radii * 3
@@ -650,6 +645,30 @@ class FishMesh:
             )
             self.drawn_ruler_labels.append(drawn_label)
 
+    # TODO: if they want the the original resolution on image, finnish this function...
+    # def create_save_image(self, ruler_point_map: Dict[int, List[Point]]):
+    #     """
+    #     when saving the image, draw rulers and ruler labels on the original image to keep original resolution.
+    #     """
+    #     label_positions = self.find_ruler_label_position(ruler_point_map, coordinates_type="full_image")
+    #     ruler_values = self.read_rulers(ruler_point_map)
+    #     save_image = deepcopy(self.img)
+    #     for i, (ruler_id, points) in enumerate(ruler_point_map.items()):
+    #         # draw lines
+    #         color  = points[0].color
+    #         p0 = (points[0].x, points[0].y)
+    #         p1 = (points[1].x, points[1].y)
+    #         save_image = cv2.line(save_image, p0, p1, color, thickness=1)
+    #
+    #
+    #
+    #         lbl_x, lbl_y = label_positions[ruler_id]
+    #         value = ruler_values[ruler_id]
+    #         color = ruler_point_map[ruler_id][0].color
+    #         self.right_view.canvas.create_text(  # TODO: replace with cv2 text function
+    #             x, y, text=f"{i + 1}: {value:.2f} cm", fill=color, anchor=tk.NW, font=(None, self.settings.font_size)
+    #         )
+    #         self.drawn_ruler_labels.append(drawn_label)
 
     def left_click_callback(self, img_view: ImageView, create_rulers_on_click: bool, event):
         if img_view.canvas_img is not None:
@@ -857,6 +876,57 @@ class FishMesh:
         img_height = self.img.shape[0]
         return np.stack([np.array([p.x * img_width, p.y * img_height]) for p in points])
 
+    def save_callback(self):
+        if self.warped_image is None:
+            return
+        if self.output_dir is None:
+            self.output_dir = self.choose_output_dir()
+
+        output_path = Path(self.output_dir)
+        if output_path.is_file():  # if the path is a file, chose the parent dir as output path
+            output_path = output_path.parent
+        if self.warped_image is not None and len(self.right_view.drawn_lines) > 0:
+            save_id = str(uuid.uuid4().hex)
+            self.save_image(output_path, save_id)
+            self.save_data(output_path, save_id)
+
+    def save_data(self, path: Path, save_id: str):
+        img_info = get_image_exif_info(self.selected_input_file)
+
+        # Read ruler info (the lengths extracted from the drawn rulers):
+        ruler_info = []
+        ruler_point_map = self.create_ruler_point_mapping(self.right_view)
+        ruler_values = self.read_rulers(ruler_point_map)
+        for i, ruler_id in enumerate(ruler_point_map.keys()):
+            # x, y = label_positions[ruler_id]
+            ruler_info.append(dict(
+                measurement_id=i+1,
+                length=ruler_values[ruler_id],
+                color=ruler_point_map[ruler_id][0].color,
+            ))
+
+        # create table with drawn measurements:
+        df = DataFrame(ruler_info)
+        # insert image information and image name (so data can be mapped back to file)
+        # (using insert to insert image information at the front)
+        for i, (field, value) in enumerate(img_info.items()):
+            df.insert(i, field, value)
+        df.insert(0, "image_file", save_id)
+
+        # Save excel file with the same name as image filename:
+        df.to_excel(path / (save_id + ".xlsx"), index=False)
+
+    def save_image(self, path: Path, save_id: str):
+        """
+        For simplicity, save image by screenshotting canvas.
+        (ImageGrap can grap a screenshot of a part of the tkinter window,
+         and we can use the widget's info to get the screenshot position/dimension)
+        """
+        x = self.window.winfo_rootx() + self.right_view.canvas.winfo_x()
+        y = self.window.winfo_rooty() + self.right_view.canvas.winfo_y()
+        x1 = x + self.right_view.canvas.winfo_width()
+        y1 = y + self.right_view.canvas.winfo_height()
+        ImageGrab.grab().crop((x, y, x1, y1)).save(path / (save_id + ".jpg"))
 
 def warp_image(img, corner_points):
     corner_points = _reorder_corner_points(corner_points, "warp")
@@ -894,6 +964,23 @@ def _reorder_corner_points(corner_points, reorder_for="warp"):
     else:
         raise ValueError("Unknown reorder_for. Allowed values: 'warp' or 'drawing_bounding_box'")
     return reordered_points
+
+def get_image_exif_info(path: str):
+    extracted_info = {
+        "image_datetime": "",
+        "image_gps_latitude": "",
+        "image_gps_longitude": ""
+    }
+    with open(path, "rb") as f:
+        exif_img = ExifImage(f)
+        if exif_img.has_exif:
+            if hasattr(exif_img, "datetime"):
+                extracted_info["datetime"] = exif_img.datetime
+            if hasattr(exif_img, "gps_latitude"):
+                extracted_info["gps_latitude"] = exif_img.gps_latitude
+            if hasattr(exif_img, "gps_longitude"):
+                extracted_info["gps_longitude"] = exif_img.gps_longitude
+    return extracted_info
 
 
 """
