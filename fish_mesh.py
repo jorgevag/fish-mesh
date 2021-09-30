@@ -975,11 +975,11 @@ def get_image_exif_info(path: str):
         exif_img = ExifImage(f)
         if exif_img.has_exif:
             if hasattr(exif_img, "datetime"):
-                extracted_info["datetime"] = exif_img.datetime
-            if hasattr(exif_img, "gps_latitude"):
+                extracted_info["image_datetime"] = exif_img.datetime
+            if hasattr(exif_img, "image_gps_latitude"):
                 extracted_info["gps_latitude"] = exif_img.gps_latitude
             if hasattr(exif_img, "gps_longitude"):
-                extracted_info["gps_longitude"] = exif_img.gps_longitude
+                extracted_info["image_gps_longitude"] = exif_img.gps_longitude
     return extracted_info
 
 
