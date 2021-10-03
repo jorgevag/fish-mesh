@@ -1,6 +1,6 @@
 #!/bin/bash
 cd pyinstaller
-pyinstaller ../fish_mesh.py --onefile --name FishMesh.exe --hidden-import='PIL._tkinter_finder'
-mv dist/FishMesh.exe ..
+pyinstaller ../fish_mesh.py --onefile --name fish-mesh.exe --hidden-import='PIL._tkinter_finder'
+mv dist/fish-mesh.exe ..
 cd ..
-chmod +x FishMesh.exe
+chmod +x fish-mesh.exe
