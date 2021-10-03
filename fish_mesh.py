@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from sys import exit
+from time import sleep
 from typing import List, Optional, Dict
 from tkinter import *
 from tkinter import filedialog
@@ -12,7 +13,7 @@ import uuid
 
 from exif import Image as ExifImage
 import cv2.cv2 as cv2
-from PIL import ImageTk, Image, ImageGrab
+from PIL import ImageTk, Image, ImageGrab, ImageColor
 from pandas import DataFrame
 
 import tkinter as tk
@@ -627,30 +628,44 @@ class FishMesh:
             )
             self.drawn_ruler_labels.append(drawn_label)
 
-    # TODO: if they want the the original resolution on image, finnish this function...
-    # def create_save_image(self, ruler_point_map: Dict[int, List[Point]]):
-    #     """
-    #     when saving the image, draw rulers and ruler labels on the original image to keep original resolution.
-    #     """
-    #     label_positions = self.find_ruler_label_position(ruler_point_map, coordinates_type="full_image")
-    #     ruler_values = self.read_rulers(ruler_point_map)
-    #     save_image = deepcopy(self.img)
-    #     for i, (ruler_id, points) in enumerate(ruler_point_map.items()):
-    #         # draw lines
-    #         color  = points[0].color
-    #         p0 = (points[0].x, points[0].y)
-    #         p1 = (points[1].x, points[1].y)
-    #         save_image = cv2.line(save_image, p0, p1, color, thickness=1)
-    #
-    #
-    #
-    #         lbl_x, lbl_y = label_positions[ruler_id]
-    #         value = ruler_values[ruler_id]
-    #         color = ruler_point_map[ruler_id][0].color
-    #         self.right_view.canvas.create_text(  # TODO: replace with cv2 text function
-    #             x, y, text=f"{i + 1}: {value:.2f} cm", fill=color, anchor=tk.NW, font=(None, self.settings.font_size)
-    #         )
-    #         self.drawn_ruler_labels.append(drawn_label)
+    def create_save_image(self):
+        """
+        when saving the image, draw rulers and ruler labels on the original image to keep original resolution.
+        """
+        ruler_point_map = self.create_ruler_point_mapping(self.right_view)
+        label_positions = self.find_ruler_label_position(ruler_point_map, coordinates_type="full_image")
+        ruler_values = self.read_rulers(ruler_point_map)
+        save_image = deepcopy(self.img)
+
+        for i, (ruler_id, points) in enumerate(ruler_point_map.items()):
+            # draw lines
+            color  = self.tk_color_to_rgb(points[0].color)
+            p0 = (int(points[0].x), int(points[0].y))
+            p1 = (int(points[1].x), int(points[1].y))
+            cv2.line(save_image, p0, p1, color=color, thickness=1, lineType=cv2.LINE_4)
+
+            lbl_x, lbl_y = label_positions[ruler_id]
+            value = ruler_values[ruler_id]
+            # color = self.window.winfo_rgb(ruler_point_map[ruler_id][0].color)
+
+            output_ruler_id = i + 1
+            cv2.putText(
+                img=save_image,
+                text=f"{output_ruler_id}: {value:.2f} cm",
+                org=(int(lbl_x), int(lbl_y)),
+                fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                fontScale=8, #self.settings.font_size,
+                color=color,
+            )
+
+        save_image = cv2.cvtColor(save_image, cv2.COLOR_RGB2BGR)
+        return save_image
+
+    def tk_color_to_rgb(self, color_name: str):
+        rgb = self.window.winfo_rgb(color_name)
+        r, g, b = [x >> 8 for x in rgb]
+        hex = '#{:02x}{:02x}{:02x}'.format(r, g, b)
+        return ImageColor.getcolor(hex, "RGB")
 
     def left_click_callback(self, img_view: ImageView, create_rulers_on_click: bool, event):
         if img_view.canvas_img is not None:
@@ -838,16 +853,17 @@ class FishMesh:
     def save_callback(self):
         if self.warped_image is None:
             return
-        if self.output_dir is None:
+        if not self.output_dir:
             self.output_dir = self.choose_output_dir()
 
-        output_path = Path(self.output_dir)
-        if output_path.is_file():  # if the path is a file, chose the parent dir as output path
-            output_path = output_path.parent
-        if self.warped_image is not None and len(self.right_view.drawn_lines) > 0:
-            save_id = str(uuid.uuid4().hex)
-            self.save_image(output_path, save_id)
-            self.save_data(output_path, save_id)
+        if self.output_dir:
+            output_path = Path(self.output_dir)
+            if output_path.is_file():  # if the path is a file, chose the parent dir as output path
+                output_path = output_path.parent
+            if self.warped_image is not None and len(self.right_view.drawn_lines) > 0:
+                save_id = str(uuid.uuid4().hex)
+                self.save_image(output_path, save_id)
+                self.save_data(output_path, save_id)
 
     def save_data(self, path: Path, save_id: str):
         img_info = get_image_exif_info(self.selected_input_file)
@@ -877,15 +893,25 @@ class FishMesh:
 
     def save_image(self, path: Path, save_id: str):
         """
+        ScreenShot Version (Hacky/Temporary)
         For simplicity, save image by screenshotting canvas.
         (ImageGrap can grap a screenshot of a part of the tkinter window,
          and we can use the widget's info to get the screenshot position/dimension)
         """
-        x = self.window.winfo_rootx() + self.right_view.canvas.winfo_x()
-        y = self.window.winfo_rooty() + self.right_view.canvas.winfo_y()
-        x1 = x + self.right_view.canvas.winfo_width()
+        x = self.window.winfo_rootx() + self.left_view.canvas.winfo_x()
+        y = self.window.winfo_rooty() + self.left_view.canvas.winfo_y()
+        x1 = x + self.left_view.canvas.winfo_width() + self.right_view.canvas.winfo_width()
         y1 = y + self.right_view.canvas.winfo_height()
+        sleep(1)
         ImageGrab.grab().crop((x, y, x1, y1)).save(path / (save_id + ".jpg"))
+
+        # TODO: make this work instead instead of screen shot dump:
+        # save_image = self.create_save_image()
+        # save_path = path / (save_id + ".jpg")
+        # cv2.imwrite(
+        #     filename=str(save_path),
+        #     img=save_image
+        # )
 
 def warp_image(img, corner_points):
     corner_points = _reorder_corner_points(corner_points, "warp")
@@ -940,6 +966,7 @@ def get_image_exif_info(path: str):
             if hasattr(exif_img, "gps_longitude"):
                 extracted_info["image_gps_longitude"] = exif_img.gps_longitude
     return extracted_info
+
 
 
 """
