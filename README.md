@@ -1,9 +1,13 @@
+![](fish-mesh.png)
+
 fish-mesh
 =========
+Measure fish (or other things) from a photo using a reference box with known dimensions.
+
 
 Dependencies
 ------------
-* python 3.8
+* python >= 3.8
 
 standard python library packages:
 * [tkinter](https://docs.python.org/3/library/tk.html)
@@ -11,18 +15,8 @@ standard python library packages:
 External packages:
 * [numpy](https://numpy.org/)
 * [OpenCV](https://docs.opencv.org/4.5.3/)
+* [Pillow](https://python-pillow.org/)
 * [pyinstaller](https://github.com/pyinstaller/pyinstaller)
-
-TODO
-----
-1. drag and drop image into memory
-2. save image into some kind of storage
-3. draw 4 draggable points on the image
-4. warp image
-5. draw two new points (estimate defaults)
-6. get distance from points
-7. get labeling/authenticity data
-
-misc:
-* we need to add code to resize images accoarding
-  to window size: `https://stackoverflow.com/questions/24061099/tkinter-resize-background-image-to-window-size`
+* [exif](https://gitlab.com/TNThieding/exif)
+* [pandas](https://pandas.pydata.org/docs/)
+  and [openpyxl](https://openpyxl.readthedocs.io/en/stable/) (write excel files)
