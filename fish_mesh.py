@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 from sys import exit
 from typing import List, Optional, Dict
 from tkinter import *
@@ -15,7 +16,6 @@ from PIL import ImageTk, Image, ImageGrab
 from pandas import DataFrame
 
 import tkinter as tk
-from tkinter import ttk
 
 """
 TODO 
@@ -24,11 +24,11 @@ TODO
   * draw multiple lines:
     * left-click:
       * if not close to another point: (probably need to extend existing callback for right_view)
-      * 
     * right-click:
       * if drawing_ruler: cancel
       * if not drawling_ruler and sufficiently close to point: delete ruler related to point (delete both points and line)
 """
+
 
 @dataclass
 class FishMeshSettings:
@@ -83,6 +83,7 @@ class ImageView:
     lines = None
     drawn_lines = None
 
+
 @dataclass
 class Point:
     x: float
@@ -91,35 +92,17 @@ class Point:
     color: Optional[str] = None
     drawing_id: Optional[int] = None
 
-@dataclass
-class Ruler:
-    id: int  # non-visual internal id
-    label: int  # visual/final id
-    label_x: int  # label x pos
-    label_y: int  # label y pos
-    points: List[Point]
-    length: float
-
-
-# @dataclass
-# class BoundingBoxDrawer:
-#     img_viewer = None # contains canvas that points should be drawn on
-#     # and the canvas to add the drawing callbacks to
-#     corners = []
-#     drawn_corner_ids = []
-
-# Where do I put cv2_image and loading??
-
 
 class FishMesh:
     def __init__(self, settings: Optional[FishMeshSettings] = None):
         self.settings: FishMeshSettings = settings if settings is not None else FishMeshSettings()
         # Init tkinter window:
         self.window = tk.Tk()
-        self.window.title('File Explorer')
-        #self.window.geometry("500x500")  # Set window size
+        self.window.title('fish-mesh')
         self.window.config(background="white")
         self.window.geometry(f"{self.window.winfo_screenwidth()}x{self.window.winfo_screenheight()}")
+        # self.window.iconbitmap(default="fish-mesh.ico")  # icon not compatible across OSs (TODO)
+        # https://stackoverflow.com/questions/20860325/python-3-tkinter-iconbitmap-error-in-ubuntu
 
         screen_width = self.window.winfo_screenwidth()
         self.point_radii = int(
@@ -132,7 +115,7 @@ class FishMesh:
             text="Browse Files",
             command=self.select_and_load_file,
         )
-        self.input_file_explorer_button.pack()
+        self.input_file_explorer_button.pack(fill="x")
 
         self.img = None
         self.warped_image = None
@@ -144,7 +127,6 @@ class FishMesh:
         self.drawn_ruler_end = None
         self.drawn_ruler_line = None
         self.num_rulers_created = 0
-        # self.rulers = []
         self.drawn_ruler_labels = []
 
         self.image_displays = tk.Frame(self.window)
@@ -688,17 +670,6 @@ class FishMesh:
             closest = img_view.canvas.find_closest(x, y, halo=10, start=drawn_points)
             selected_point_id = closest[0]
             if selected_point_id in drawn_points:
-                # img_view.dragging_point = True
-                # # Delete selected point (it will be redrawn on the release position)
-                # selected_point_idx = img_view.drawn_points.index(selected_point_id)
-                # del img_view.points[selected_point_idx]
-                # img_view.canvas.delete(selected_point_id)
-                # img_view.drawn_points.remove(selected_point_id)
-                # # Remove lines (this is easier than to draw lines for all points in the drag_callback)
-                # if img_view.drawn_lines:
-                #     for line in img_view.drawn_lines:
-                #         img_view.canvas.delete(line)
-
                 # create reference to point in img_view.points to easily adjust its position:
                 # Find the clicked point
                 selected_point_idx = img_view.drawn_points.index(selected_point_id)
@@ -708,7 +679,6 @@ class FishMesh:
                 self.dragged_point.y = (y - img_view.y_padding) / img_view.resized_height
                 # First part of animation: removing it from original position to a position centered on mouse:
                 img_view.drawn_points.remove(selected_point_id)
-                #self.dragged_point.drawing_id = self.draw_point(img_view, self.dragged_point)
                 self.draw()
             elif create_rulers_on_click:
                 if self.new_ruler_start_point is None:
@@ -750,17 +720,6 @@ class FishMesh:
         x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
         y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
 
-        # if img_view.dragging_point:
-        #     if img_view.drawn_dragging_point:
-        #         img_view.canvas.delete(img_view.drawn_dragging_point)
-        #     img_view.drawn_dragging_point = img_view.canvas.create_oval(
-        #         # set point diagonal as 2% of monitor screen width
-        #         x - self.point_radii,
-        #         y - self.point_radii,
-        #         x + self.point_radii,
-        #         y + self.point_radii,
-        #         fill='IndianRed1'
-        #     )
         if self.dragged_point is not None:
             img_view.canvas.delete(self.dragged_point.drawing_id)
             # Update dragged_point with click position to moving mouse:
