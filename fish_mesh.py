@@ -59,6 +59,7 @@ class FishMeshSettings:
             "purple"
         ]
     )
+    measure_box_margin_rel = 0.0  # to allow showing the entire head of fish placed along the edge
 
 @dataclass
 class Data:
@@ -93,6 +94,13 @@ class Point:
     color: Optional[str] = None
     drawing_id: Optional[int] = None
 
+@dataclass
+class RelativeComponent:
+    x: float
+    y: float
+    w: float  # width
+    h: float  # height
+
 
 class FishMesh:
     def __init__(self, settings: Optional[FishMeshSettings] = None):
@@ -118,6 +126,7 @@ class FishMesh:
         )
         self.input_file_explorer_button.pack(fill="x")
 
+
         self.img = None
         self.warped_image = None
         self.output_dir = None
@@ -134,10 +143,18 @@ class FishMesh:
         self.image_displays.pack(fill="both", expand=True)
         self.left_view = ImageView()
         self.left_view.canvas = Canvas(self.image_displays, width=0, height=0, bg="white")
-        self.left_view.canvas.pack(side=LEFT, fill="both", expand=True)
+        # self.left_view.canvas.pack(side=LEFT, fill="both", expand=True)
+        self.left_view.canvas.pack(fill="both", expand=True)
         self.right_view = ImageView()
         self.right_view.canvas = Canvas(self.image_displays, width=0, height=0, bg="white")
-        self.right_view.canvas.pack(side=RIGHT, fill="both", expand=True)
+        # self.right_view.canvas.pack(side=RIGHT, fill="both", expand=True)
+        self.mini_window_spec = RelativeComponent(x=0.8, y=0.0, w=0.2, h=0.2)
+        self.right_view.canvas.place(
+            relx=self.mini_window_spec.x,
+            rely=self.mini_window_spec.y,
+            relwidth=self.mini_window_spec.w,
+            relheight=self.mini_window_spec.h,
+        )
         self.window.bind('<Configure>', self.resize_callback)
 
         """
@@ -149,6 +166,16 @@ class FishMesh:
         self.left_view.canvas.bind("<Button-1>", partial(self.left_click_callback, self.left_view, False))
         self.left_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.left_view))
         self.left_view.canvas.bind("<ButtonRelease-1>", partial(self.release_callback, self.left_view))
+
+        # # ZOOM (DOESN'T WORK! Might also be platform dependent (MouseWheel on windows, 4,5 else)):
+        # self.zoom_scale = 1
+        # self.zoom_pos_x = None
+        # self.zoom_pos_y = None
+        # # self.left_view.canvas.bind("<MouseWheel>", partial(self.zoom, self.left_view))
+        # self.left_view.canvas.bind("<Button-4>", partial(self.zoom, self.left_view, 1))
+        # self.left_view.canvas.bind("<Button-5>", partial(self.zoom, self.left_view, -1))
+        # self.left_view.canvas.bind('<ButtonPress-2>', lambda event: self.left_view.canvas.scan_mark(event.x, event.y))
+        # self.left_view.canvas.bind("<B2-Motion>", lambda event: self.left_view.canvas.scan_dragto(event.x, event.y, gain=1))
 
         self.right_view.canvas.bind("<Button-1>", partial(self.left_click_callback, self.right_view, True))
         self.right_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.right_view))
@@ -174,6 +201,28 @@ class FishMesh:
             bg="white",
         )
         self.rotate_clockwise_button.pack(side=RIGHT, fill="x", expand=True)
+
+        self.to_measurement_button_spec = RelativeComponent(x=0.8, y=0.2, w=0.2, h=0.04)
+        self.to_measurement_window_button = Button(
+            self.image_displays,
+            bg="white",
+            text="To measurement window",
+            command=self.go_to_measurement_window,
+        )
+        #self.to_measurement_window_button.pack(fill="x")
+        self.to_measurement_window_button.place(
+            relx=self.to_measurement_button_spec.x,
+            rely=self.to_measurement_button_spec.y,
+            relwidth=self.to_measurement_button_spec.w,
+            relheight=self.to_measurement_button_spec.h,
+        )
+        self.to_box_drawing_button_spec = RelativeComponent(x=0, y=0, w=0, h=0)
+        self.to_box_drawing_window_button = Button(
+            self.image_displays,
+            bg="white",
+            text="\u2190",
+            command=self.go_to_box_drawing_window,
+        )
 
         self.save_buttons_frame = tk.Frame(self.window)
         self.save_buttons_frame.pack(fill="x")
@@ -298,6 +347,9 @@ class FishMesh:
 
         self.draw_image(self.left_view)
         self.draw_bounding_box(self.left_view)
+        # # ZOOM (DOESN'T WORK)
+        # if self.zoom_pos_x is not None and self.zoom_pos_y is not None:
+        #     self.left_view.canvas.scale(ALL, self.zoom_pos_x, self.zoom_pos_y, self.zoom_scale, self.zoom_scale)
 
         if self.right_view.img is not None:
             self.draw_image(self.right_view)
@@ -323,6 +375,41 @@ class FishMesh:
         self.init_bounding_box(self.left_view)  # redraw box since it is hard to rotate points
         self.warp_image()
         self.draw()
+
+    def go_to_measurement_window(self):
+        self.left_view.canvas.pack_forget()
+        self.right_view.canvas.pack_forget()
+        # Hack to hide buttons placed using .place() (giving it zero area):
+        self.to_measurement_window_button.place(relheight=0, relwidth=0, relx=0, rely=0)
+        self.right_view.canvas.pack(fill="both", expand=True)
+        # self.to_box_drawing_window_button.pack(fill="x")
+        self.to_box_drawing_window_button.place(relheight=0.025, relwidth=0.025, relx=0.0, rely=0.0)
+
+    def go_to_box_drawing_window(self):
+        self.left_view.canvas.pack_forget()
+        self.right_view.canvas.pack_forget()
+        # Hack to hide buttons placed using .place() (giving it zero area):
+        self.to_box_drawing_window_button.place(
+            relx=self.to_box_drawing_button_spec.x,
+            rely=self.to_box_drawing_button_spec.y,
+            relwidth=self.to_box_drawing_button_spec.w,
+            relheight=self.to_box_drawing_button_spec.h,
+        )
+        self.left_view.canvas.pack(fill="both", expand=True)
+        # self.right_view.canvas.place(relheight=0.2, relwidth=0.2, relx=0.8, rely=0.0)
+        self.right_view.canvas.place(
+            relx=self.mini_window_spec.x,
+            rely=self.mini_window_spec.y,
+            relwidth=self.mini_window_spec.w,
+            relheight=self.mini_window_spec.h,
+        )
+        self.to_measurement_window_button.place(
+            relx=self.to_measurement_button_spec.x,
+            rely=self.to_measurement_button_spec.y,
+            relwidth=self.to_measurement_button_spec.w,
+            relheight=self.to_measurement_button_spec.h,
+        )
+        # self.to_measurement_window_button.pack(fill="x")
 
     # def rotate_points(self, direction: str):
     #     """
@@ -648,12 +735,23 @@ class FishMesh:
             value = ruler_values[ruler_id]
             # color = self.window.winfo_rgb(ruler_point_map[ruler_id][0].color)
 
+            # Font Size
+            # * Drawn font size is based on pixels of monitor
+            # * the font in drawn on top of a resized image
+            # * When drawing on the original image (not resized), the
+            #   font scale and thickness will need to be scaled to represent
+            #   the size of the text relative to the image it was drawn upon.
+            #   To do this I will likely need the
+            #   * screen size(resolution)
+            #   * resized_image size
+            #   * font size (which is likely relative to the monitor size/resolution)
+
             output_ruler_id = i + 1
             cv2.putText(
                 img=save_image,
                 text=f"{output_ruler_id}: {value:.2f} cm",
                 org=(int(lbl_x), int(lbl_y)),
-                fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                fontFace=cv2.FONT_HERSHEY_DUPLEX,  # cv2.FONT_HERSHEY_SIMPLEX,
                 fontScale=8, #self.settings.font_size,
                 color=color,
             )
@@ -840,9 +938,19 @@ class FishMesh:
                 # self.rulers.remove[selected_ruler_id]
                 self.draw()
 
+    # def zoom(self, view: ImageView, scale_sign, event):
+    #     x = view.canvas.canvasx(event.x)
+    #     y = view.canvas.canvasy(event.y)
+    #     # factor = 1.05 #** event.delta
+    #     # view.canvas.scale(ALL, x, y, factor, factor)
+    #     self.zoom_scale += scale_sign * 0.05
+    #     self.zoom_pos_x = x
+    #     self.zoom_pos_y = y
+    #     self.draw()
+
     def warp_image(self):
         corners_ndarray = self.points_to_ndarray(self.left_view.points)
-        self.warped_image = warp_image(self.img, corners_ndarray)
+        self.warped_image = warp_image(self.img, corners_ndarray, self.settings.measure_box_margin_rel)
         self.warp_activated = True
 
     def points_to_ndarray(self, points: List[Point]):
@@ -898,14 +1006,23 @@ class FishMesh:
         (ImageGrap can grap a screenshot of a part of the tkinter window,
          and we can use the widget's info to get the screenshot position/dimension)
         """
-        x = self.window.winfo_rootx() + self.left_view.canvas.winfo_x()
-        y = self.window.winfo_rooty() + self.left_view.canvas.winfo_y()
-        x1 = x + self.left_view.canvas.winfo_width() + self.right_view.canvas.winfo_width()
-        y1 = y + self.right_view.canvas.winfo_height()
-        sleep(1)
+        # # Only take screenshot of right canvas (buggy; doesn't work on other OS)
+        # x = self.window.winfo_rootx() + self.left_view.canvas.winfo_x()
+        # y = self.window.winfo_rooty() + self.left_view.canvas.winfo_y()
+        # x1 = x + self.left_view.canvas.winfo_width() + self.right_view.canvas.winfo_width()
+        # y1 = y + self.right_view.canvas.winfo_height()
+        # sleep(1)  # Sleep to not take screenshot of file selector (allowing it to close)
+        # ImageGrab.grab().crop((x, y, x1, y1)).save(path / (save_id + ".jpg"))
+
+        # Screenshot the entire thing
+        x = self.window.winfo_rootx()
+        y = self.window.winfo_rooty()
+        x1 = x + self.window.winfo_width()
+        y1 = y + self.window.winfo_height()
+        sleep(1)  # Sleep to not take screenshot of file selector (allowing it to close)
         ImageGrab.grab().crop((x, y, x1, y1)).save(path / (save_id + ".jpg"))
 
-        # TODO: make this work instead instead of screen shot dump:
+        # # TODO: make this work instead instead of screen shot dump:
         # save_image = self.create_save_image()
         # save_path = path / (save_id + ".jpg")
         # cv2.imwrite(
@@ -913,13 +1030,18 @@ class FishMesh:
         #     img=save_image
         # )
 
-def warp_image(img, corner_points):
+def warp_image(img, corner_points, rel_margin: float):
     corner_points = _reorder_corner_points(corner_points, "warp")
     img_width = img.shape[1]
     img_height = img.shape[0]
     old_corner_points = np.float32(corner_points)
-    new_corner_points = np.float32([[0, 0], [img_width, 0],
-                                    [0, img_height], [img_width, img_height]])
+    # new_corner_points = np.float32([[0, 0], [img_width, 0],
+    #                                 [0, img_height], [img_width, img_height]])
+    new_corner_points = np.float32([
+        [rel_margin * img_width, rel_margin * img_height],
+        [(1 - rel_margin) * img_width, rel_margin * img_height],
+        [rel_margin * img_width, (1 - rel_margin) * img_height],
+        [(1 - rel_margin) * img_width, (1 - rel_margin) * img_height]])
     matrix = cv2.getPerspectiveTransform(old_corner_points, new_corner_points)
     img_warped = cv2.warpPerspective(img, matrix, (img_width, img_height))
     return img_warped
