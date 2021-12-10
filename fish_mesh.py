@@ -18,8 +18,14 @@ from pandas import DataFrame
 
 import tkinter as tk
 
+# TODO:
+#  * opt to show bounding box on measurement window
+#  * restrict drawn rulers to bounding box in measurement window
+#  * add color option
+#  * fix save option (option to specify user name)
+
 """
-TODO 
+old TODO 
   * consider adding zoom functionality (this might leave the resize logic unnecessary; which is good)
     https://stackoverflow.com/questions/41656176/tkinter-canvas-zoom-move-pan
   * draw multiple lines:
@@ -59,7 +65,7 @@ class FishMeshSettings:
             "purple"
         ]
     )
-    measure_box_margin_rel = 0.0  # to allow showing the entire head of fish placed along the edge
+    measure_box_margin_rel = 0.1  # to allow showing the entire head of fish placed along the edge
 
 @dataclass
 class Data:
@@ -133,6 +139,8 @@ class FishMesh:
 
         self.dragged_point: Optional[Point] = None
 
+        self.measure_box_lines = []
+
         self.new_ruler_start_point = None
         self.drawn_ruler_end = None
         self.drawn_ruler_line = None
@@ -163,9 +171,9 @@ class FishMesh:
         middle        <Button-2>, <B2-Motion>, <ButtonRelease-2>
         right         <Button-3>, <B3-Motion>, <ButtonRelease-3>
         """
-        self.left_view.canvas.bind("<Button-1>", partial(self.left_click_callback, self.left_view, False))
+        self.left_view.canvas.bind("<Button-1>", partial(self.left_click_callback, self.left_view, False, "image"))
         self.left_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.left_view))
-        self.left_view.canvas.bind("<ButtonRelease-1>", partial(self.release_callback, self.left_view))
+        self.left_view.canvas.bind("<ButtonRelease-1>", partial(self.release_callback, self.left_view, "image"))
 
         # # ZOOM (DOESN'T WORK! Might also be platform dependent (MouseWheel on windows, 4,5 else)):
         # self.zoom_scale = 1
@@ -177,10 +185,10 @@ class FishMesh:
         # self.left_view.canvas.bind('<ButtonPress-2>', lambda event: self.left_view.canvas.scan_mark(event.x, event.y))
         # self.left_view.canvas.bind("<B2-Motion>", lambda event: self.left_view.canvas.scan_dragto(event.x, event.y, gain=1))
 
-        self.right_view.canvas.bind("<Button-1>", partial(self.left_click_callback, self.right_view, True))
+        self.right_view.canvas.bind("<Button-1>", partial(self.left_click_callback, self.right_view, True, "box"))
         self.right_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.right_view))
-        self.right_view.canvas.bind("<ButtonRelease-1>", partial(self.release_callback, self.right_view))
-        self.right_view.canvas.bind("<Motion>", partial(self.move_callback, self.right_view))
+        self.right_view.canvas.bind("<ButtonRelease-1>", partial(self.release_callback, self.right_view, "box"))
+        self.right_view.canvas.bind("<Motion>", partial(self.move_callback, self.right_view, "box"))
         # button 2 and 3 (middle and right) might vary from OS, so assign both:
         self.right_view.canvas.bind("<Button-2>", partial(self.right_click_callback, self.right_view))
         self.right_view.canvas.bind("<Button-3>", partial(self.right_click_callback, self.right_view))
@@ -353,6 +361,7 @@ class FishMesh:
 
         if self.right_view.img is not None:
             self.draw_image(self.right_view)
+            self.draw_corrected_bounding_box(self.right_view)
             if self.right_view.points:
                 ruler_point_map = self.create_ruler_point_mapping(self.right_view)
                 self.draw_rulers(self.right_view, ruler_point_map)
@@ -530,6 +539,24 @@ class FishMesh:
                     fill='red'
                 )
                 img_view.drawn_points.append(canvas_point)
+
+    def draw_corrected_bounding_box(self, img_view):
+        # Draw lines
+        if self.measure_box_lines:
+            for line in self.measure_box_lines:
+                img_view.canvas.delete(line)
+        x0 = img_view.x_padding
+        y0 = img_view.y_padding
+        min_x = self.settings.measure_box_margin_rel * img_view.resized_width + x0
+        min_y = self.settings.measure_box_margin_rel * img_view.resized_height + y0
+        max_x = (1 - self.settings.measure_box_margin_rel) * img_view.resized_width + x0
+        max_y = (1 - self.settings.measure_box_margin_rel) * img_view.resized_height + y0
+        # draw lines: top_left, top_right, bottom_right, bottom_left:
+        self.measure_box_lines = []
+        self.measure_box_lines.append(img_view.canvas.create_line(min_x, min_y, min_x, max_y, fill="red"))
+        self.measure_box_lines.append(img_view.canvas.create_line(min_x, max_y, max_x, max_y, fill="red"))
+        self.measure_box_lines.append(img_view.canvas.create_line(max_x, max_y, max_x, min_y, fill="red"))
+        self.measure_box_lines.append(img_view.canvas.create_line(max_x, min_y, min_x, min_y, fill="red"))
 
     # # # # # # # #
     # Draw Rulers #
@@ -765,14 +792,11 @@ class FishMesh:
         hex = '#{:02x}{:02x}{:02x}'.format(r, g, b)
         return ImageColor.getcolor(hex, "RGB")
 
-    def left_click_callback(self, img_view: ImageView, create_rulers_on_click: bool, event):
+    def left_click_callback(self, img_view: ImageView, create_rulers_on_click: bool, bound_to: str, event):
         if img_view.canvas_img is not None:
             x = event.x
             y = event.y
-            x = max(img_view.x_padding, x)
-            y = max(img_view.y_padding, y)
-            x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
-            y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
+            x, y = self.restrict_position(x, y, img_view, bound_to)
 
             # Hack: tkinter doesn't allow to separate drawn canvas types.
             #       solution: delete drawn text when clicking points:
@@ -826,12 +850,8 @@ class FishMesh:
     def drag_callback(self, img_view: ImageView, event):
         x = event.x
         y = event.y
-
         # make sure point isn't dragged outside canvas
-        x = max(img_view.x_padding, x)
-        y = max(img_view.y_padding, y)
-        x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
-        y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
+        x, y = self.restrict_position(x, y, img_view, bound_to="image")
 
         if self.dragged_point is not None:
             img_view.canvas.delete(self.dragged_point.drawing_id)
@@ -840,15 +860,17 @@ class FishMesh:
             self.dragged_point.y = (y - img_view.y_padding) / img_view.resized_height
             self.draw()
 
-    def release_callback(self, img_view: ImageView, event):
+    def release_callback(self, img_view: ImageView, bound_to: str, event):
+        """
+        bound_to="image": bound rulers to be inside image
+        bound_to="box": bound rules to be inside the defined drawing box
+        """
+
         if self.dragged_point is not None:
             x = event.x
             y = event.y
             # make sure point isn't dragged outside canvas
-            x = max(img_view.x_padding, x)
-            y = max(img_view.y_padding, y)
-            x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
-            y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
+            x, y = self.restrict_position(x, y, img_view, bound_to)
 
             img_view.canvas.delete(self.dragged_point.drawing_id)
             # Update point with the release position:
@@ -858,16 +880,12 @@ class FishMesh:
             self.warp_image()
             self.draw()
 
-    def move_callback(self, img_view: ImageView, event):
+    def move_callback(self, img_view: ImageView, bound_to: str, event):
         if self.new_ruler_start_point is not None:
             x = event.x
             y = event.y
-
-            # make sure point isn't dragged outside canvas
-            x = max(img_view.x_padding, x)
-            y = max(img_view.y_padding, y)
-            x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
-            y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
+            # make sure point isn't dragged outside canvas or the drawn box
+            x, y = self.restrict_position(x, y, img_view, bound_to)
 
             img_view.canvas.delete(self.new_ruler_start_point.drawing_id)
             start_x = self.new_ruler_start_point.x * img_view.resized_width + img_view.x_padding
@@ -937,6 +955,25 @@ class FishMesh:
                 del img_view.points[connected_point_idx]
                 # self.rulers.remove[selected_ruler_id]
                 self.draw()
+
+    def restrict_position(self, x, y, img_view: ImageView, bound_to: str = "image"):
+        if bound_to == "image":
+            x = max(img_view.x_padding, x)
+            y = max(img_view.y_padding, y)
+            x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
+            y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
+        elif bound_to == "box":
+            min_x = self.settings.measure_box_margin_rel * img_view.resized_width + img_view.x_padding
+            min_y = self.settings.measure_box_margin_rel * img_view.resized_height + img_view.y_padding
+            max_x = (1 - self.settings.measure_box_margin_rel) * img_view.resized_width + img_view.x_padding
+            max_y = (1 - self.settings.measure_box_margin_rel) * img_view.resized_height + img_view.y_padding
+            x = max(min_x, x)
+            y = max(min_y, y)
+            x = min(max_x, x)
+            y = min(max_y, y)
+        else:
+            raise ValueError("param bound_to must be set to 'image' or 'box'.")
+        return x, y
 
     # def zoom(self, view: ImageView, scale_sign, event):
     #     x = view.canvas.canvasx(event.x)
