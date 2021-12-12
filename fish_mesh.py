@@ -3,7 +3,7 @@ from sys import exit
 from time import sleep
 from typing import List, Optional, Dict
 from tkinter import *
-from tkinter import filedialog
+from tkinter import filedialog, colorchooser
 from pathlib import Path
 from dataclasses import dataclass, field
 import numpy as np
@@ -42,7 +42,8 @@ class FishMeshSettings:
     measure_box_width = 42.0
     measure_box_height = 29.6
     font_size = 16
-    point_size_relative_to_monitor_width = 0.0025
+    point_size_relative_to_monitor_width = 0.0001  # 0.0025
+    default_color = "#ffff00"  # yellow
     colors: List[str] = field(
         default_factory=lambda: [
             "red",
@@ -124,13 +125,65 @@ class FishMesh:
             self.settings.point_size_relative_to_monitor_width * screen_width
         )  # Make point sizes a percentage of the monitor width
 
+        self.top_meny = tk.Frame(self.window)
+        self.top_meny.pack(fill="x")#, expand=True)
         self.input_file_explorer_button = Button(
-            self.window,
+            self.top_meny,
             bg="white",
             text="Browse Files",
             command=self.select_and_load_file,
         )
-        self.input_file_explorer_button.pack(fill="x")
+        self.input_file_explorer_button.pack(side=LEFT, fill="x", expand=True)
+        self.ruler_color = self.settings.default_color
+        self.color_picker_button = Button(
+            self.top_meny,
+            bg="white",
+            text="Color",
+            command=self.choose_color,
+        )
+        self.color_picker_button.pack(side=LEFT, fill="x", expand=True)
+
+        self.measure_box_width = self.settings.measure_box_width
+        self.measure_box_width_entry = tk.Frame(self.top_meny)
+        self.measure_box_width_entry.pack(side=LEFT, fill="x")
+        self.measure_box_width_label = tk.Label(
+            self.measure_box_width_entry,
+            text="box width (cm):",
+            background="white"
+        )
+        self.measure_box_width_label.pack(side=LEFT, fill="x")
+        vcmd = self.window.register(self.measure_box_width_field_validation)
+        ivcmd = self.window.register(self.restore_measure_box_width_field_to_previous)
+        self.measure_box_width_field = tk.Entry(
+            self.measure_box_width_entry,
+            bg="white",
+            validate="focusout",
+            validatecommand=(vcmd, "%P"),
+            invalidcommand=(ivcmd),
+        )
+        self.measure_box_width_field.insert(END, str(self.measure_box_width))
+        self.measure_box_width_field.pack(side=LEFT, fill="x", expand=True)
+
+        self.measure_box_height = self.settings.measure_box_height
+        self.measure_box_height_entry = tk.Frame(self.top_meny)
+        self.measure_box_height_entry.pack(side=LEFT, fill="x")
+        self.measure_box_height_label = tk.Label(
+            self.measure_box_height_entry,
+            text="box height (cm):",
+            background="white"
+        )
+        self.measure_box_height_label.pack(side=LEFT, fill="x")
+        vcmd = self.window.register(self.measure_box_height_field_validation)
+        ivcmd = self.window.register(self.restore_measure_box_height_field_to_previous)
+        self.measure_box_height_field = tk.Entry(
+            self.measure_box_height_entry,
+            bg="white",
+            validate="focusout",
+            validatecommand=(vcmd, "%P"),
+            invalidcommand=(ivcmd),
+        )
+        self.measure_box_height_field.insert(END, str(self.measure_box_height))
+        self.measure_box_height_field.pack(side=LEFT, fill="x", expand=True)
 
 
         self.img = None
@@ -172,7 +225,7 @@ class FishMesh:
         right         <Button-3>, <B3-Motion>, <ButtonRelease-3>
         """
         self.left_view.canvas.bind("<Button-1>", partial(self.left_click_callback, self.left_view, False, "image"))
-        self.left_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.left_view))
+        self.left_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.left_view, "image"))
         self.left_view.canvas.bind("<ButtonRelease-1>", partial(self.release_callback, self.left_view, "image"))
 
         # # ZOOM (DOESN'T WORK! Might also be platform dependent (MouseWheel on windows, 4,5 else)):
@@ -186,7 +239,7 @@ class FishMesh:
         # self.left_view.canvas.bind("<B2-Motion>", lambda event: self.left_view.canvas.scan_dragto(event.x, event.y, gain=1))
 
         self.right_view.canvas.bind("<Button-1>", partial(self.left_click_callback, self.right_view, True, "box"))
-        self.right_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.right_view))
+        self.right_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.right_view, "box"))
         self.right_view.canvas.bind("<ButtonRelease-1>", partial(self.release_callback, self.right_view, "box"))
         self.right_view.canvas.bind("<Motion>", partial(self.move_callback, self.right_view, "box"))
         # button 2 and 3 (middle and right) might vary from OS, so assign both:
@@ -272,6 +325,39 @@ class FishMesh:
             )
         )
         return self.selected_input_file
+
+    def choose_color(self):
+        rgb, hex = colorchooser.askcolor(title="Choose color")
+        if hex is not None:
+            self.ruler_color = hex
+        self.color_picker_button.configure(text=f"Color: {self.ruler_color}")
+
+    def measure_box_width_field_validation(self, P):
+        try:
+            float(P)
+        except ValueError:
+            return False
+        else:
+            self.measure_box_width = float(P)
+            return True
+
+    def restore_measure_box_width_field_to_previous(self):
+        self.measure_box_width_field.delete(0, "end")  # clear text
+        self.measure_box_width_field.insert(END, str(self.measure_box_width))
+
+    def measure_box_height_field_validation(self, P):
+        try:
+            float(P)
+        except ValueError:
+            return False
+        else:
+            self.measure_box_height = float(P)
+            return True
+
+    def restore_measure_box_height_field_to_previous(self):
+        self.measure_box_height_field.delete(0, "end")  # clear text
+        self.measure_box_height_field.insert(END, str(self.measure_box_height))
+
 
     def choose_output_dir(self):
         self.output_dir = filedialog.askdirectory(
@@ -710,14 +796,14 @@ class FishMesh:
         return ruler_label_position
 
     def read_rulers(self, ruler_point_map: Dict[int, List[Point]]):
-        # find rulers:
+        img_to_box_scale_ratio = 1 / (1 - 2 * self.settings.measure_box_margin_rel)
         ruler_values = {}
         for ruler_id, ruler_points in ruler_point_map.items():
             p1 = ruler_points[0]
             p2 = ruler_points[1]
             ruler_values[ruler_id] = np.sqrt(
-                (self.settings.measure_box_width * (p1.x - p2.x)) ** 2
-                + (self.settings.measure_box_height * (p1.y - p2.y)) ** 2
+                (img_to_box_scale_ratio * self.measure_box_width * (p1.x - p2.x)) ** 2
+                + (img_to_box_scale_ratio * self.measure_box_height * (p1.y - p2.y)) ** 2
             )
         return ruler_values
 
@@ -823,7 +909,8 @@ class FishMesh:
                     rel_x = (x - img_view.x_padding) / img_view.resized_width
                     rel_y = (y - img_view.y_padding) / img_view.resized_height
                     self.new_ruler_start_point = Point(
-                        rel_x, rel_y, self.num_rulers_created + 1, self.settings.colors[(self.num_rulers_created + 1) % len(self.settings.colors)]
+                        # rel_x, rel_y, self.num_rulers_created + 1, self.settings.colors[(self.num_rulers_created + 1) % len(self.settings.colors)]
+                        rel_x, rel_y, self.num_rulers_created + 1, self.ruler_color
                     )
                     self.new_ruler_start_point.drawing_id = self.draw_point(img_view, self.new_ruler_start_point)
                 else:
@@ -835,7 +922,8 @@ class FishMesh:
                     img_view.points.extend([
                         deepcopy(self.new_ruler_start_point),
                         Point(
-                            rel_x, rel_y, self.num_rulers_created, self.settings.colors[self.num_rulers_created % len(self.settings.colors)]
+                            # rel_x, rel_y, self.num_rulers_created, self.settings.colors[self.num_rulers_created % len(self.settings.colors)]
+                            rel_x, rel_y, self.num_rulers_created, self.ruler_color
                         )
                     ])
                     img_view.canvas.delete(self.new_ruler_start_point.drawing_id)
@@ -847,13 +935,17 @@ class FishMesh:
                     self.draw()
 
 
-    def drag_callback(self, img_view: ImageView, event):
+    def drag_callback(self, img_view: ImageView, bound_to: str, event):
+        if self.img is None:
+            return
+
         x = event.x
         y = event.y
         # make sure point isn't dragged outside canvas
-        x, y = self.restrict_position(x, y, img_view, bound_to="image")
+        x, y = self.restrict_position(x, y, img_view, bound_to)
 
         if self.dragged_point is not None:
+            img_view.canvas.configure(cursor="none")
             img_view.canvas.delete(self.dragged_point.drawing_id)
             # Update dragged_point with click position to moving mouse:
             self.dragged_point.x = (x - img_view.x_padding) / img_view.resized_width
@@ -867,6 +959,8 @@ class FishMesh:
         """
 
         if self.dragged_point is not None:
+            img_view.canvas.configure(cursor="arrow")
+
             x = event.x
             y = event.y
             # make sure point isn't dragged outside canvas
