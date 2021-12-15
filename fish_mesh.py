@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from sys import exit
+from datetime import datetime
 from time import sleep
 from typing import List, Optional, Dict
 from tkinter import *
@@ -9,7 +10,6 @@ from dataclasses import dataclass, field
 import numpy as np
 from functools import partial
 from copy import deepcopy
-import uuid
 
 from exif import Image as ExifImage
 import cv2.cv2 as cv2
@@ -17,24 +17,6 @@ from PIL import ImageTk, Image, ImageGrab, ImageColor
 from pandas import DataFrame
 
 import tkinter as tk
-
-# TODO:
-#  * opt to show bounding box on measurement window
-#  * restrict drawn rulers to bounding box in measurement window
-#  * add color option
-#  * fix save option (option to specify user name)
-
-"""
-old TODO 
-  * consider adding zoom functionality (this might leave the resize logic unnecessary; which is good)
-    https://stackoverflow.com/questions/41656176/tkinter-canvas-zoom-move-pan
-  * draw multiple lines:
-    * left-click:
-      * if not close to another point: (probably need to extend existing callback for right_view)
-    * right-click:
-      * if drawing_ruler: cancel
-      * if not drawling_ruler and sufficiently close to point: delete ruler related to point (delete both points and line)
-"""
 
 
 @dataclass
@@ -285,19 +267,9 @@ class FishMesh:
             command=self.go_to_box_drawing_window,
         )
 
-        self.save_buttons_frame = tk.Frame(self.window)
-        self.save_buttons_frame.pack(fill="x")
-        output_file_explorer_button = Button(
-            self.save_buttons_frame,
-            bg="white",
-            text="Save to",
-            command=self.choose_output_dir,
-
-        )
-        output_file_explorer_button.pack(side=LEFT, fill="x", expand=True)
         self.save_button = Button(
-            self.save_buttons_frame,
-            text="Save",
+            self.window,
+            text="Save measurements",
             command=self.save_callback,
             bg="white",
         )
@@ -358,13 +330,20 @@ class FishMesh:
         self.measure_box_height_field.delete(0, "end")  # clear text
         self.measure_box_height_field.insert(END, str(self.measure_box_height))
 
+    def get_default_filename(self) -> str:
+        # return datetime.utcnow().strftime("%Y-%m-%d--%H-%M-%S--UTC")
+        return datetime.utcnow().strftime("%Y-%m-%d--%H-%M--UTC")
 
-    def choose_output_dir(self):
-        self.output_dir = filedialog.askdirectory(
+    def choose_save_file(self) -> Optional[str]:
+        file_handle = filedialog.asksaveasfile(
             initialdir=Path.cwd().__str__(),
-            title="Select an output directory/folder",
+            initialfile=self.get_default_filename(),
+            title="Select save filename and location"
         )
-        return self.output_dir
+        if file_handle is not None:
+            filename = file_handle.name
+            Path(filename).unlink()
+            return filename
 
     def load_image(self, image_file):
         img_array_BGR = cv2.imread(image_file)
@@ -660,12 +639,6 @@ class FishMesh:
                 rulers[p.ruler_id].append(p)
         return rulers
 
-    # def init_ruler(self, img_view):
-    #     # w = self.canvas.winfo_width()
-    #     # h = self.canvas.winfo_height()
-    #     left = Point(0, 0.50)
-    #     right = Point(0.50, 0.50)
-    #     img_view.points = [left, right]
     def draw_rulers(self, img_view, ruler_point_map: Dict[int, List[Point]]):
         if img_view.points is None or len(img_view.points) == 0:
             # self.init_ruler(img_view)
@@ -824,7 +797,7 @@ class FishMesh:
             color = ruler_point_map[ruler_id][0].color
             # self.right_view.canvas.create_text(10, 10, text=text, fill="red", anchor=tk.NW, font=(None, 16))
             drawn_label = self.right_view.canvas.create_text(
-                x, y, text=f"{i + 1}: {value:.2f} cm", fill=color, anchor=tk.NW, font=(None, self.settings.font_size)
+                x, y, text=f"{i + 1}: {value:.1f} cm", fill=color, anchor=tk.NW, font=(None, self.settings.font_size)
             )
             self.drawn_ruler_labels.append(drawn_label)
 
@@ -862,7 +835,7 @@ class FishMesh:
             output_ruler_id = i + 1
             cv2.putText(
                 img=save_image,
-                text=f"{output_ruler_id}: {value:.2f} cm",
+                text=f"{output_ruler_id}: {value:.1f} cm",
                 org=(int(lbl_x), int(lbl_y)),
                 fontFace=cv2.FONT_HERSHEY_DUPLEX,  # cv2.FONT_HERSHEY_SIMPLEX,
                 fontScale=8, #self.settings.font_size,
@@ -1092,17 +1065,10 @@ class FishMesh:
     def save_callback(self):
         if self.warped_image is None:
             return
-        if not self.output_dir:
-            self.output_dir = self.choose_output_dir()
-
-        if self.output_dir:
-            output_path = Path(self.output_dir)
-            if output_path.is_file():  # if the path is a file, chose the parent dir as output path
-                output_path = output_path.parent
-            if self.warped_image is not None and len(self.right_view.drawn_lines) > 0:
-                save_id = str(uuid.uuid4().hex)
-                self.save_image(output_path, save_id)
-                self.save_data(output_path, save_id)
+        save_path = Path(self.choose_save_file())
+        if save_path is not None:
+            self.save_image(path=save_path.parent, save_id=save_path.stem)
+            self.save_data(path=save_path.parent, save_id=save_path.stem)
 
     def save_data(self, path: Path, save_id: str):
         img_info = get_image_exif_info(self.selected_input_file)
@@ -1112,11 +1078,9 @@ class FishMesh:
         ruler_point_map = self.create_ruler_point_mapping(self.right_view)
         ruler_values = self.read_rulers(ruler_point_map)
         for i, ruler_id in enumerate(ruler_point_map.keys()):
-            # x, y = label_positions[ruler_id]
             ruler_info.append(dict(
                 measurement_id=i+1,
-                length=ruler_values[ruler_id],
-                color=ruler_point_map[ruler_id][0].color,
+                length_cm=ruler_values[ruler_id],
             ))
 
         # create table with drawn measurements:
@@ -1125,10 +1089,13 @@ class FishMesh:
         # (using insert to insert image information at the front)
         for i, (field, value) in enumerate(img_info.items()):
             df.insert(i, field, value)
-        df.insert(0, "image_file", save_id)
+
+        df.insert(0, "image_file", create_save_image_name(save_id))
 
         # Save excel file with the same name as image filename:
-        df.to_excel(path / (save_id + ".xlsx"), index=False)
+        filename =  path / create_data_file_name(save_id)
+        df.to_excel(str(filename), index=False, float_format="%.1f")
+
 
     def save_image(self, path: Path, save_id: str):
         """
@@ -1151,7 +1118,8 @@ class FishMesh:
         x1 = x + self.window.winfo_width()
         y1 = y + self.window.winfo_height()
         sleep(1)  # Sleep to not take screenshot of file selector (allowing it to close)
-        ImageGrab.grab().crop((x, y, x1, y1)).save(path / (save_id + ".jpg"))
+        filename =  path / create_save_image_name(save_id)
+        ImageGrab.grab().crop((x, y, x1, y1)).save(str(filename))
 
         # # TODO: make this work instead instead of screen shot dump:
         # save_image = self.create_save_image()
@@ -1160,6 +1128,14 @@ class FishMesh:
         #     filename=str(save_path),
         #     img=save_image
         # )
+
+
+def create_save_image_name(save_id: str) -> str:
+    return "P-" + save_id + ".jpg"
+
+def create_data_file_name(save_id: str) -> str:
+    return "D-" + save_id + ".xlsx"
+
 
 def warp_image(img, corner_points, rel_margin: float):
     corner_points = _reorder_corner_points(corner_points, "warp")
@@ -1220,18 +1196,6 @@ def get_image_exif_info(path: str):
                 extracted_info["image_gps_longitude"] = exif_img.gps_longitude
     return extracted_info
 
-
-
-"""
-Create draggable point:
-  1. on click find closest drawn point, use self.canvas.find_closest()
-  2. if close enough find index of point, delete drawn point, set self.bounding_box[index] = None, and
-     if a corner is None, then don't draw it (add if-statement in the drawing function), set
-     a flag, self.moving_corner=True
-  3. Draw point on cursor if self.moving_corner=True
-  3. set self.moving_corner=False, get cursor position, create Point and replace with
-     None value in self.bounding_box, redraw bounding_box
-"""
 
 if __name__ == "__main__":
     fm = FishMesh()
