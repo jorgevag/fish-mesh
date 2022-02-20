@@ -116,6 +116,7 @@ class FishMesh:
             command=self.select_and_load_file,
         )
         self.input_file_explorer_button.pack(side=LEFT, fill="x", expand=True)
+        self.selected_input_file = None
         self.ruler_color = self.settings.default_color
         self.color_picker_button = Button(
             self.top_meny,
@@ -275,20 +276,20 @@ class FishMesh:
         )
         self.save_button.pack(side=RIGHT, fill="x", expand=True)
 
-
     def select_and_load_file(self):
         selected_file = self.select_file()
-        self.img = self.load_image(selected_file)
+        if selected_file:
+            self.selected_input_file = selected_file
+            self.img = self.load_image(selected_file)
 
-        # After file has loaded, show image, and draw initial bounding box and warped image
-        self.init_bounding_box(self.left_view)
-        self.warp_image()
-        self.draw()
-
+            # After file has loaded, show image, and draw initial bounding box and warped image
+            self.init_bounding_box(self.left_view)
+            self.warp_image()
+            self.draw()
 
     def select_file(self):
         """opening file explorer window"""
-        self.selected_input_file = filedialog.askopenfilename(
+        selected_input_file = filedialog.askopenfilename(
             initialdir=Path.cwd().__str__(),
             title="Select a File",
             filetypes=(
@@ -296,7 +297,7 @@ class FishMesh:
                 ("Text files", "*.txt*"),
             )
         )
-        return self.selected_input_file
+        return selected_input_file
 
     def choose_color(self):
         rgb, hex = colorchooser.askcolor(title="Choose color")
@@ -786,8 +787,8 @@ class FishMesh:
         """
         label_positions = self.find_ruler_label_position(ruler_point_map)
         ruler_values = self.read_rulers(ruler_point_map)
-        #ruler_percentage_length = ruler_length * 100
-        #text = f"relative length: {ruler_percentage_length:.2f} %"
+        # ruler_percentage_length = ruler_length * 100
+        # text = f"relative length: {ruler_percentage_length:.2f} %"
         if self.drawn_ruler_labels:
             for label in self.drawn_ruler_labels:
                 self.right_view.canvas.delete(label)
@@ -808,29 +809,28 @@ class FishMesh:
         ruler_point_map = self.create_ruler_point_mapping(self.right_view)
         label_positions = self.find_ruler_label_position(ruler_point_map, coordinates_type="full_image")
         ruler_values = self.read_rulers(ruler_point_map)
-        save_image = deepcopy(self.img)
+        save_image = deepcopy(self.warped_image)
+        img_width = self.warped_image.shape[1]
+        img_height = self.warped_image.shape[0]
 
+        scaled_font_size = self.get_original_image_font_size(
+            self.settings.font_size
+        )
         for i, (ruler_id, points) in enumerate(ruler_point_map.items()):
             # draw lines
-            color  = self.tk_color_to_rgb(points[0].color)
-            p0 = (int(points[0].x), int(points[0].y))
-            p1 = (int(points[1].x), int(points[1].y))
+            color = self.tk_color_to_rgb(points[0].color)
+            p0 = (
+                int(points[0].x * img_width),
+                int(points[0].y * img_height)
+            )
+            p1 = (
+                 int(points[1].x * img_width),
+                 int(points[1].y * img_height)
+            )
             cv2.line(save_image, p0, p1, color=color, thickness=1, lineType=cv2.LINE_4)
 
             lbl_x, lbl_y = label_positions[ruler_id]
             value = ruler_values[ruler_id]
-            # color = self.window.winfo_rgb(ruler_point_map[ruler_id][0].color)
-
-            # Font Size
-            # * Drawn font size is based on pixels of monitor
-            # * the font in drawn on top of a resized image
-            # * When drawing on the original image (not resized), the
-            #   font scale and thickness will need to be scaled to represent
-            #   the size of the text relative to the image it was drawn upon.
-            #   To do this I will likely need the
-            #   * screen size(resolution)
-            #   * resized_image size
-            #   * font size (which is likely relative to the monitor size/resolution)
 
             output_ruler_id = i + 1
             cv2.putText(
@@ -838,12 +838,52 @@ class FishMesh:
                 text=f"{output_ruler_id}: {value:.1f} cm",
                 org=(int(lbl_x), int(lbl_y)),
                 fontFace=cv2.FONT_HERSHEY_DUPLEX,  # cv2.FONT_HERSHEY_SIMPLEX,
-                fontScale=8, #self.settings.font_size,
+                fontScale=scaled_font_size,
+                thickness=int(scaled_font_size),
                 color=color,
             )
 
+        # Draw bounding box
+        min_x = int(self.settings.measure_box_margin_rel * img_width)
+        min_y = int(self.settings.measure_box_margin_rel * img_height)
+        max_x = int((1 - self.settings.measure_box_margin_rel) * img_width)
+        max_y = int((1 - self.settings.measure_box_margin_rel) * img_height)
+        # draw lines: top_left, top_right, bottom_right, bottom_left:
+        red = (255, 0, 0)
+        cv2.line(save_image, (min_x, min_y), (min_x, max_y), color=red, thickness=1, lineType=cv2.LINE_4)
+        cv2.line(save_image, (min_x, max_y), (max_x, max_y), color=red, thickness=1, lineType=cv2.LINE_4)
+        cv2.line(save_image, (max_x, max_y), (max_x, min_y), color=red, thickness=1, lineType=cv2.LINE_4)
+        cv2.line(save_image, (max_x, min_y), (min_x, min_y), color=red, thickness=1, lineType=cv2.LINE_4)
+
         save_image = cv2.cvtColor(save_image, cv2.COLOR_RGB2BGR)
         return save_image
+
+    def get_original_image_font_size(self, font_size: int):
+        """
+            Get the size of the font to be drawn on the original image
+            from the font size drawn on the screen (on resized image)
+        """
+        # get font size relative to resized image
+        resized_height = self.right_view.resized_height
+        img_relative_font_size = font_size / resized_height  # both are in pixels
+
+        # Get the number of pixels this represents on the original image
+        scaled_font_size = img_relative_font_size * len(self.img)
+
+        # Correct any differences in font size between tkinter and cv2
+        corrected_font_size = (
+                scaled_font_size
+                * self.get_font_scale_correction_by_font_size_diff(font_size)
+        )
+        return corrected_font_size
+
+    def get_font_scale_correction_by_font_size_diff(self, font_size: int, cv2_font=cv2.FONT_HERSHEY_DUPLEX):
+        """
+        Get correction for the size of a font relative to the
+        size of the cv2 font with fontScale=1, thickness=1
+        """
+        cv2_text_height = cv2.getTextSize(text="A", fontFace=cv2_font, fontScale=font_size, thickness=font_size)[0][1]
+        return font_size / cv2_text_height
 
     def tk_color_to_rgb(self, color_name: str):
         rgb = self.window.winfo_rgb(color_name)
@@ -906,7 +946,6 @@ class FishMesh:
                     self.drawn_ruler_line = None
                     self.new_ruler_start_point = None
                     self.draw()
-
 
     def drag_callback(self, img_view: ImageView, bound_to: str, event):
         if self.img is None:
@@ -1093,45 +1132,18 @@ class FishMesh:
         df.insert(0, "image_file", create_save_image_name(save_id))
 
         # Save excel file with the same name as image filename:
-        filename =  path / create_data_file_name(save_id)
+        filename = path / create_data_file_name(save_id)
         df.to_excel(str(filename), index=False, float_format="%.1f")
 
-
     def save_image(self, path: Path, save_id: str):
-        """
-        ScreenShot Version (Hacky/Temporary)
-        For simplicity, save image by screenshotting canvas.
-        (ImageGrap can grap a screenshot of a part of the tkinter window,
-         and we can use the widget's info to get the screenshot position/dimension)
-        """
-        # # Only take screenshot of right canvas (buggy; doesn't work on other OS)
-        # x = self.window.winfo_rootx() + self.left_view.canvas.winfo_x()
-        # y = self.window.winfo_rooty() + self.left_view.canvas.winfo_y()
-        # x1 = x + self.left_view.canvas.winfo_width() + self.right_view.canvas.winfo_width()
-        # y1 = y + self.right_view.canvas.winfo_height()
-        # sleep(1)  # Sleep to not take screenshot of file selector (allowing it to close)
-        # ImageGrab.grab().crop((x, y, x1, y1)).save(path / (save_id + ".jpg"))
-
-        # Screenshot the entire thing
-        x = self.window.winfo_rootx()
-        y = self.window.winfo_rooty()
-        x1 = x + self.window.winfo_width()
-        y1 = y + self.window.winfo_height()
-        sleep(1)  # Sleep to not take screenshot of file selector (allowing it to close)
-        filename =  path / create_save_image_name(save_id)
-        ImageGrab.grab().crop((x, y, x1, y1)).save(str(filename))
-
-        # # TODO: make this work instead instead of screen shot dump:
-        # save_image = self.create_save_image()
-        # save_path = path / (save_id + ".jpg")
-        # cv2.imwrite(
-        #     filename=str(save_path),
-        #     img=save_image
-        # )
+        save_image = self.create_save_image()
+        filename = path / create_save_image_name(save_id)
+        cv2.imwrite(filename=str(filename), img=save_image)
 
 
 def create_save_image_name(save_id: str) -> str:
     return "P-" + save_id + ".jpg"
+
 
 def create_data_file_name(save_id: str) -> str:
     return "D-" + save_id + ".xlsx"
@@ -1152,6 +1164,7 @@ def warp_image(img, corner_points, rel_margin: float):
     matrix = cv2.getPerspectiveTransform(old_corner_points, new_corner_points)
     img_warped = cv2.warpPerspective(img, matrix, (img_width, img_height))
     return img_warped
+
 
 # reorder (for correct input to warping function
 def _reorder_corner_points(corner_points, reorder_for="warp"):
@@ -1178,6 +1191,7 @@ def _reorder_corner_points(corner_points, reorder_for="warp"):
     else:
         raise ValueError("Unknown reorder_for. Allowed values: 'warp' or 'drawing_bounding_box'")
     return reordered_points
+
 
 def get_image_exif_info(path: str):
     extracted_info = {
