@@ -88,24 +88,30 @@ class FishMesh:
             self.settings.point_size_relative_to_monitor_width * screen_width
         )
 
-        self.top_meny = tk.Frame(self.window)
-        self.top_meny.pack(fill="x")#, expand=True)
+        self.top_menu = tk.Frame(self.window, background="white")
+        self.top_menu.pack(fill="x")#, expand=True)
         self.input_file_explorer_button = Button(
-            self.top_meny,
+            self.top_menu,
             bg="white",
             text="Browse Files",
             command=self.select_and_load_file,
+            # remove border:
+            highlightthickness=0,
+            bd=0
         )
         # self.input_file_explorer_button.pack(side=LEFT, fill="x", expand=True)
-        self.input_file_explorer_button.pack(fill="x", expand=True)
+        self.input_file_explorer_button.pack(side=tk.LEFT)
         self.selected_input_file = None
         self.settings_button = Button(
-            self.top_meny,
+            self.top_menu,
             bg="white",
             text="Settings",
             command=self.change_settings,
+            # remove border:
+            highlightthickness=0,
+            bd=0
         )
-        self.settings_button.pack(fill="x", expand=True)
+        self.settings_button.pack(side=tk.RIGHT)
 
         self.img = None
         self.warped_image = None
@@ -139,6 +145,18 @@ class FishMesh:
         )
         self.window.bind('<Configure>', self.resize_callback)
 
+        self.show_mini_window = True
+        self.toggle_mini_window_button = tk.Button(
+            self.top_menu,
+            text="Hide",
+            command=self.toggle_mini_window,
+            bg="white",
+            # remove border:
+            highlightthickness=0,
+            bd=0
+        )
+        self.toggle_mini_window_button.pack(side=tk.RIGHT)
+
         """
         mouse-button  click      hold&move    release
         left          <Button-1>, <B1-Motion>, <ButtonRelease-1>
@@ -167,52 +185,57 @@ class FishMesh:
         self.right_view.canvas.bind("<Button-2>", partial(self.right_click_callback, self.right_view))
         self.right_view.canvas.bind("<Button-3>", partial(self.right_click_callback, self.right_view))
 
-        self.rotate_buttons_frame = tk.Frame(self.window)
-        self.rotate_buttons_frame.pack(fill="x")
         self.rotate_anticlockwise_button = Button(
-            self.rotate_buttons_frame,
+            self.top_menu,
             text="\u21BB",  # unicode char for anticlockwise circular arrow
             command=self.rotate_image_clockwise,
             bg="white",
+            # remove border:
+            highlightthickness=0,
+            bd=0
         )
-        self.rotate_anticlockwise_button.pack(side=LEFT, fill="x", expand=True)
+        self.rotate_anticlockwise_button.pack(side=tk.LEFT)
         self.rotate_clockwise_button = Button(
-            self.rotate_buttons_frame,
+            self.top_menu,
             text="\u21BA",  # unicode char for anticlockwise circular arrow
             command=self.rotate_image_anticlockwise,
             bg="white",
+            # remove border:
+            highlightthickness=0,
+            bd=0
         )
-        self.rotate_clockwise_button.pack(side=RIGHT, fill="x", expand=True)
+        self.rotate_clockwise_button.pack(side=tk.LEFT)
 
-        self.to_measurement_button_spec = RelativeComponent(x=0.8, y=0.2, w=0.2, h=0.04)
         self.to_measurement_window_button = Button(
-            self.image_displays,
+            self.top_menu,
             bg="white",
             text="To measurement window",
             command=self.go_to_measurement_window,
+            # remove border:
+            highlightthickness=0,
+            bd=0
         )
-        #self.to_measurement_window_button.pack(fill="x")
-        self.to_measurement_window_button.place(
-            relx=self.to_measurement_button_spec.x,
-            rely=self.to_measurement_button_spec.y,
-            relwidth=self.to_measurement_button_spec.w,
-            relheight=self.to_measurement_button_spec.h,
-        )
-        self.to_box_drawing_button_spec = RelativeComponent(x=0, y=0, w=0, h=0)
+        self.to_measurement_window_button.pack(side=tk.LEFT)
         self.to_box_drawing_window_button = Button(
-            self.image_displays,
+            self.top_menu,
             bg="white",
-            text="\u2190",
+            # text="\u2190",  # Arrow
+            text="Back to box drawing window",  # Arrow
             command=self.go_to_box_drawing_window,
+            # remove border:
+            highlightthickness=0,
+            bd=0
         )
 
         self.save_button = Button(
-            self.window,
+            self.top_menu,
             text="Save measurements",
             command=self.save_callback,
             bg="white",
+            # remove border:
+            highlightthickness=0,
+            bd=0
         )
-        self.save_button.pack(side=RIGHT, fill="x", expand=True)
 
     def select_and_load_file(self):
         selected_file = self.select_file()
@@ -362,53 +385,70 @@ class FishMesh:
         self.draw()  # redraw everything to the new canvas display sizes
 
     def rotate_image_clockwise(self):
-        # self.rotate_points("clockwise")
-        self.img = cv2.rotate(self.img, cv2.ROTATE_90_CLOCKWISE)
-        self.init_bounding_box(self.left_view)  # redraw box since it is hard to rotate points
-        self.warp_image()
-        self.draw()
+        if self.img is not None:
+            self.img = cv2.rotate(self.img, cv2.ROTATE_90_CLOCKWISE)
+            self.init_bounding_box(self.left_view)  # redraw box since it is hard to rotate points
+            self.warp_image()
+            self.draw()
 
     def rotate_image_anticlockwise(self):
-        # self.rotate_points("anticlockwise")
-        self.img = cv2.rotate(self.img, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        self.init_bounding_box(self.left_view)  # redraw box since it is hard to rotate points
-        self.warp_image()
-        self.draw()
+        if self.img is not None:
+            self.img = cv2.rotate(self.img, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            self.init_bounding_box(self.left_view)  # redraw box since it is hard to rotate points
+            self.warp_image()
+            self.draw()
 
     def go_to_measurement_window(self):
         self.left_view.canvas.pack_forget()
         self.right_view.canvas.pack_forget()
-        # Hack to hide buttons placed using .place() (giving it zero area):
-        self.to_measurement_window_button.place(relheight=0, relwidth=0, relx=0, rely=0)
+
+        # top menu
+        self.rotate_clockwise_button.pack_forget()
+        self.rotate_anticlockwise_button.pack_forget()
+        self.to_measurement_window_button.pack_forget()
+        self.toggle_mini_window_button.pack_forget()
+        self.to_box_drawing_window_button.pack(side=tk.LEFT)
+        self.save_button.pack(side=tk.LEFT)
+
         self.right_view.canvas.pack(fill="both", expand=True)
-        # self.to_box_drawing_window_button.pack(fill="x")
-        self.to_box_drawing_window_button.place(relheight=0.025, relwidth=0.025, relx=0.0, rely=0.0)
 
     def go_to_box_drawing_window(self):
         self.left_view.canvas.pack_forget()
         self.right_view.canvas.pack_forget()
-        # Hack to hide buttons placed using .place() (giving it zero area):
-        self.to_box_drawing_window_button.place(
-            relx=self.to_box_drawing_button_spec.x,
-            rely=self.to_box_drawing_button_spec.y,
-            relwidth=self.to_box_drawing_button_spec.w,
-            relheight=self.to_box_drawing_button_spec.h,
-        )
+
+        # top menu
+        self.to_box_drawing_window_button.pack_forget()
+        self.save_button.pack_forget()
+        self.rotate_clockwise_button.pack(side=tk.LEFT)
+        self.rotate_anticlockwise_button.pack(side=tk.LEFT)
+        self.to_measurement_window_button.pack(side=tk.LEFT)
+        self.toggle_mini_window_button.pack(side=tk.RIGHT)
+
         self.left_view.canvas.pack(fill="both", expand=True)
-        # self.right_view.canvas.place(relheight=0.2, relwidth=0.2, relx=0.8, rely=0.0)
-        self.right_view.canvas.place(
-            relx=self.mini_window_spec.x,
-            rely=self.mini_window_spec.y,
-            relwidth=self.mini_window_spec.w,
-            relheight=self.mini_window_spec.h,
-        )
-        self.to_measurement_window_button.place(
-            relx=self.to_measurement_button_spec.x,
-            rely=self.to_measurement_button_spec.y,
-            relwidth=self.to_measurement_button_spec.w,
-            relheight=self.to_measurement_button_spec.h,
-        )
-        # self.to_measurement_window_button.pack(fill="x")
+        if self.show_mini_window:
+            self.right_view.canvas.place(
+                relx=self.mini_window_spec.x,
+                rely=self.mini_window_spec.y,
+                relwidth=self.mini_window_spec.w,
+                relheight=self.mini_window_spec.h,
+            )
+
+    def toggle_mini_window(self):
+        if self.show_mini_window:
+            self.show_mini_window = False
+            # Hack to remove mini window by giving it 0 width
+            # (had to use 0.01 to not get error while resizing window; TODO: fix resize hack)
+            self.right_view.canvas.place(relx=0.01, rely=0.01, relwidth=0.01, relheight=0.01)
+            self.toggle_mini_window_button.configure(text="Show")
+        else:
+            self.show_mini_window = True
+            self.right_view.canvas.place(
+                relx=self.mini_window_spec.x,
+                rely=self.mini_window_spec.y,
+                relwidth=self.mini_window_spec.w,
+                relheight=self.mini_window_spec.h,
+            )
+            self.toggle_mini_window_button.configure(text="Hide")
 
     # def rotate_points(self, direction: str):
     #     """
