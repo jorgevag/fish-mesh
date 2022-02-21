@@ -16,10 +16,10 @@ from exif import Image as ExifImage
 import cv2.cv2 as cv2
 from PIL import ImageTk, Image, ImageColor
 from pandas import DataFrame
+import dacite
 
-from settings import Settings, SettingsError
+from settings import Settings, SettingsError, DEFAULT_SETTINGS_PATH
 from settings_dialog import SettingsDialog
-
 
 
 @dataclass
@@ -60,7 +60,21 @@ class RelativeComponent:
 
 class FishMesh:
     def __init__(self, settings: Optional[Settings] = None):
-        self.settings: Settings = settings if settings is not None else Settings()
+        self.settings: Settings
+        if settings is not None:
+            self.settings = settings
+        elif DEFAULT_SETTINGS_PATH.exists():
+            try:
+                self.settings = Settings.from_file(DEFAULT_SETTINGS_PATH)
+            except (dacite.DaciteError, dacite.DaciteFieldError, dacite.UnexpectedDataError):
+                messagebox.showwarning(
+                    "Invalid local settings file"
+                    "Found fish-mesh-settings.json, but this was not"
+                    " correctly formatted and will be ignored."
+                )
+                self.settings = Settings()
+        else:
+            self.settings = Settings()
         # Init tkinter window:
         self.window = tk.Tk()
         self.window.title('fish-mesh')

@@ -1,9 +1,10 @@
 import tkinter as tk
 from typing import Dict, Optional, Any, Union
 from tkinter import simpledialog, colorchooser, messagebox
+import json
 
-from dataclasses import dataclass, fields
-from settings import Settings
+from dataclasses import dataclass, fields, asdict
+from settings import Settings, SettingsError, DEFAULT_SETTINGS_PATH
 
 
 @dataclass
@@ -35,6 +36,7 @@ class SettingsDialog(tk.simpledialog.Dialog):
         super().__init__(parent, title)
 
     def body(self, frame):
+        last_row = 0
         for row, field in enumerate(self.fields):
             # print(field.name, field.type, getattr(FishMeshSettings, field.name))
             self.fields[field].label = tk.Label(frame, width=self.field_width, text=var_to_text(field))
@@ -51,11 +53,20 @@ class SettingsDialog(tk.simpledialog.Dialog):
                 self.fields[field].entry = tk.Entry(frame, width=self.field_width)
                 self.fields[field].entry.insert(tk.END, self.fields[field].value)  # show existing value
                 self.fields[field].entry.grid(row=row, column=1)
+
         return frame
 
     def buttonbox(self):
-        self.apply_button = tk.Button(self, text='OK', width=5, command=self.apply_pressed)
+        self.apply_button = tk.Button(self, text='Apply', width=5, command=self.apply_pressed)
         self.apply_button.pack(side="left")
+
+        self.save_settings_button = tk.Button(
+            self,
+            text="Apply and save for future sessions",
+            command=self.save_settings,
+        )
+        self.save_settings_button.pack(side="left")
+
         cancel_button = tk.Button(self, text='Cancel', width=5, command=self.destroy)
         cancel_button.pack(side="right")
         self.bind("<Return>", lambda event: self.apply_pressed)
@@ -66,20 +77,7 @@ class SettingsDialog(tk.simpledialog.Dialog):
         if field_errors:
             messagebox.showerror("Incorrect field input", "\n".join(field_errors))
         else:
-            for field in self.fields:
-                if isinstance(self.fields[field].entry, tk.Entry):
-                    self.fields[field].value = self.fields[field].entry.get()
-                elif field == "draw_color":
-                    self.fields["draw_color"].value = self.selected_draw_color
-                else:
-                    TypeError(
-                        "Unknown type for 'entry' property to receive"
-                        " user input value in SettingsDialog."
-                        " These should be tk.Entry except for draw_color, which"
-                        " is handled differently due to colorchooser.askcolor()."
-                        " Make sure, new special cases of entries are handled"
-                        " appropriately."
-                    )
+            self.read_entries()
             self.destroy()
 
     def choose_color(self):
@@ -88,10 +86,21 @@ class SettingsDialog(tk.simpledialog.Dialog):
             self.selected_draw_color = hex
         self.fields["draw_color"].entry.configure(text=f"", background=hex)
 
-    def get_settings(self) -> Settings:
-        return Settings(**{
-            name: field.type(field.value) for name, field in self.fields.items()
-        })
+    def read_entries(self):
+        for field in self.fields:
+            if isinstance(self.fields[field].entry, tk.Entry):
+                self.fields[field].value = self.fields[field].entry.get()
+            elif field == "draw_color":
+                self.fields["draw_color"].value = self.selected_draw_color
+            else:
+                TypeError(
+                    "Unknown type for 'entry' property to receive"
+                    " user input value in SettingsDialog."
+                    " These should be tk.Entry except for draw_color, which"
+                    " is handled differently due to colorchooser.askcolor()."
+                    " Make sure, new special cases of entries are handled"
+                    " appropriately."
+                )
 
     def validate_fields(self):
         field_errors = []
@@ -108,6 +117,30 @@ class SettingsDialog(tk.simpledialog.Dialog):
                         f"is not of type '{field.type.__name__}'"
                     )
         return field_errors
+
+    def save_settings(self):
+        self.read_entries()
+        settings = self.get_settings()
+        try:
+            settings.validate()
+        except SettingsError as e:
+            messagebox.showerror(f"Cannot save invalid settings", str(e))
+        else:
+            self.destroy()
+            if DEFAULT_SETTINGS_PATH.exists():
+                answered_yes = messagebox.askyesno(
+                    "Settings file already exists",
+                    f"Settings file {DEFAULT_SETTINGS_PATH} already exists. Would you like to overwrite it?"
+                )
+                if not answered_yes:
+                    return
+            with open(DEFAULT_SETTINGS_PATH, "w") as f:
+                f.write(json.dumps(asdict(settings), indent=4))
+
+    def get_settings(self) -> Settings:
+        return Settings(**{
+            name: field.type(field.value) for name, field in self.fields.items()
+        })
 
 
 def var_to_text(name: str):
