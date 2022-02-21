@@ -2,9 +2,10 @@
 from sys import exit
 from datetime import datetime
 from time import sleep
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Tuple
 from tkinter import *
-from tkinter import filedialog, colorchooser
+from tkinter import filedialog, colorchooser, messagebox
+import tkinter as tk
 from pathlib import Path
 from dataclasses import dataclass, field
 import numpy as np
@@ -13,47 +14,13 @@ from copy import deepcopy
 
 from exif import Image as ExifImage
 import cv2.cv2 as cv2
-from PIL import ImageTk, Image, ImageGrab, ImageColor
+from PIL import ImageTk, Image, ImageColor
 from pandas import DataFrame
 
-import tkinter as tk
+from settings import Settings, SettingsError
+from settings_dialog import SettingsDialog
 
 
-@dataclass
-class FishMeshSettings:
-    measure_box_width = 42.0
-    measure_box_height = 29.6
-    font_size = 16
-    point_size_relative_to_monitor_width = 0.0001  # 0.0025
-    default_color = "#ffff00"  # yellow
-    colors: List[str] = field(
-        default_factory=lambda: [
-            "red",
-            "green",
-            "blue",
-            "orange",
-            "magenta",
-            "brown",
-            "gray",
-            "yellow green",
-            "blue violet",
-            "cornflower blue",
-            "dark orange",
-            "cyan",
-            "coral",
-            "gold",
-            "hot pink",
-            "green yellow",
-            "maroon",
-            "purple"
-        ]
-    )
-    measure_box_margin_rel = 0.1  # to allow showing the entire head of fish placed along the edge
-
-@dataclass
-class Data:
-    loaded_img = None
-    warped_img = None
 
 @dataclass
 class ImageView:
@@ -92,8 +59,8 @@ class RelativeComponent:
 
 
 class FishMesh:
-    def __init__(self, settings: Optional[FishMeshSettings] = None):
-        self.settings: FishMeshSettings = settings if settings is not None else FishMeshSettings()
+    def __init__(self, settings: Optional[Settings] = None):
+        self.settings: Settings = settings if settings is not None else Settings()
         # Init tkinter window:
         self.window = tk.Tk()
         self.window.title('fish-mesh')
@@ -105,7 +72,7 @@ class FishMesh:
         screen_width = self.window.winfo_screenwidth()
         self.point_radii = int(
             self.settings.point_size_relative_to_monitor_width * screen_width
-        )  # Make point sizes a percentage of the monitor width
+        )
 
         self.top_meny = tk.Frame(self.window)
         self.top_meny.pack(fill="x")#, expand=True)
@@ -115,59 +82,16 @@ class FishMesh:
             text="Browse Files",
             command=self.select_and_load_file,
         )
-        self.input_file_explorer_button.pack(side=LEFT, fill="x", expand=True)
+        # self.input_file_explorer_button.pack(side=LEFT, fill="x", expand=True)
+        self.input_file_explorer_button.pack(fill="x", expand=True)
         self.selected_input_file = None
-        self.ruler_color = self.settings.default_color
-        self.color_picker_button = Button(
+        self.settings_button = Button(
             self.top_meny,
             bg="white",
-            text="Color",
-            command=self.choose_color,
+            text="Settings",
+            command=self.change_settings,
         )
-        self.color_picker_button.pack(side=LEFT, fill="x", expand=True)
-
-        self.measure_box_width = self.settings.measure_box_width
-        self.measure_box_width_entry = tk.Frame(self.top_meny)
-        self.measure_box_width_entry.pack(side=LEFT, fill="x")
-        self.measure_box_width_label = tk.Label(
-            self.measure_box_width_entry,
-            text="box width (cm):",
-            background="white"
-        )
-        self.measure_box_width_label.pack(side=LEFT, fill="x")
-        vcmd = self.window.register(self.measure_box_width_field_validation)
-        ivcmd = self.window.register(self.restore_measure_box_width_field_to_previous)
-        self.measure_box_width_field = tk.Entry(
-            self.measure_box_width_entry,
-            bg="white",
-            validate="focusout",
-            validatecommand=(vcmd, "%P"),
-            invalidcommand=(ivcmd),
-        )
-        self.measure_box_width_field.insert(END, str(self.measure_box_width))
-        self.measure_box_width_field.pack(side=LEFT, fill="x", expand=True)
-
-        self.measure_box_height = self.settings.measure_box_height
-        self.measure_box_height_entry = tk.Frame(self.top_meny)
-        self.measure_box_height_entry.pack(side=LEFT, fill="x")
-        self.measure_box_height_label = tk.Label(
-            self.measure_box_height_entry,
-            text="box height (cm):",
-            background="white"
-        )
-        self.measure_box_height_label.pack(side=LEFT, fill="x")
-        vcmd = self.window.register(self.measure_box_height_field_validation)
-        ivcmd = self.window.register(self.restore_measure_box_height_field_to_previous)
-        self.measure_box_height_field = tk.Entry(
-            self.measure_box_height_entry,
-            bg="white",
-            validate="focusout",
-            validatecommand=(vcmd, "%P"),
-            invalidcommand=(ivcmd),
-        )
-        self.measure_box_height_field.insert(END, str(self.measure_box_height))
-        self.measure_box_height_field.pack(side=LEFT, fill="x", expand=True)
-
+        self.settings_button.pack(fill="x", expand=True)
 
         self.img = None
         self.warped_image = None
@@ -299,37 +223,24 @@ class FishMesh:
         )
         return selected_input_file
 
-    def choose_color(self):
-        rgb, hex = colorchooser.askcolor(title="Choose color")
-        if hex is not None:
-            self.ruler_color = hex
-        self.color_picker_button.configure(text=f"Color: {self.ruler_color}")
-
-    def measure_box_width_field_validation(self, P):
+    def change_settings(self):
+        dialog = SettingsDialog(title="Settings", parent=self.window, settings=self.settings)
+        settings = dialog.get_settings()
         try:
-            float(P)
-        except ValueError:
-            return False
+            settings.validate()
+        except SettingsError as e:
+            messagebox.showerror(f"Incorrect settings", str(e))
         else:
-            self.measure_box_width = float(P)
-            return True
+            self.settings = settings
+            self.update_settings_related_members()
+            self.draw()
 
-    def restore_measure_box_width_field_to_previous(self):
-        self.measure_box_width_field.delete(0, "end")  # clear text
-        self.measure_box_width_field.insert(END, str(self.measure_box_width))
-
-    def measure_box_height_field_validation(self, P):
-        try:
-            float(P)
-        except ValueError:
-            return False
-        else:
-            self.measure_box_height = float(P)
-            return True
-
-    def restore_measure_box_height_field_to_previous(self):
-        self.measure_box_height_field.delete(0, "end")  # clear text
-        self.measure_box_height_field.insert(END, str(self.measure_box_height))
+    def update_settings_related_members(self):
+        # Make point sizes a percentage of the monitor width
+        screen_width = self.window.winfo_screenwidth()
+        self.point_radii = int(
+            self.settings.point_size_relative_to_monitor_width * screen_width
+        )
 
     def get_default_filename(self) -> str:
         # return datetime.utcnow().strftime("%Y-%m-%d--%H-%M-%S--UTC")
@@ -432,7 +343,6 @@ class FishMesh:
                 ruler_point_map = self.create_ruler_point_mapping(self.right_view)
                 self.draw_rulers(self.right_view, ruler_point_map)
                 self.draw_ruler_labels(ruler_point_map)
-
 
     def resize_callback(self, event):
         self.draw()  # redraw everything to the new canvas display sizes
@@ -669,7 +579,8 @@ class FishMesh:
                 img_view.x_padding + (w * p2.x),
                 img_view.y_padding + (h * p2.y),
                 width=1,
-                fill=p1.color
+                # fill=p1.color
+                fill=self.settings.draw_color
             ))
             # Draw points:
             drawn_point = img_view.canvas.create_oval(
@@ -677,7 +588,8 @@ class FishMesh:
                 img_view.y_padding + int(h * p1.y) - self.point_radii,
                 img_view.x_padding + int(w * p1.x) + self.point_radii,
                 img_view.y_padding + int(h * p1.y) + self.point_radii,
-                fill=p1.color
+                # fill=p1.color
+                fill=self.settings.draw_color
             )
             p1.drawing_id = drawn_point
             img_view.drawn_points.append(drawn_point)
@@ -687,7 +599,8 @@ class FishMesh:
                 img_view.y_padding + int(h * p2.y) - self.point_radii,
                 img_view.x_padding + int(w * p2.x) + self.point_radii,
                 img_view.y_padding + int(h * p2.y) + self.point_radii,
-                fill=p2.color
+                # fill=p2.color
+                fill=self.settings.draw_color
             )
             p2.drawing_id = drawn_point
             img_view.drawn_points.append(drawn_point)
@@ -776,8 +689,8 @@ class FishMesh:
             p1 = ruler_points[0]
             p2 = ruler_points[1]
             ruler_values[ruler_id] = np.sqrt(
-                (img_to_box_scale_ratio * self.measure_box_width * (p1.x - p2.x)) ** 2
-                + (img_to_box_scale_ratio * self.measure_box_height * (p1.y - p2.y)) ** 2
+                (img_to_box_scale_ratio * self.settings.measure_box_width * (p1.x - p2.x)) ** 2
+                + (img_to_box_scale_ratio * self.settings.measure_box_height * (p1.y - p2.y)) ** 2
             )
         return ruler_values
 
@@ -795,7 +708,8 @@ class FishMesh:
         for i, ruler_id in enumerate(ruler_point_map.keys()):
             x, y = label_positions[ruler_id]
             value = ruler_values[ruler_id]
-            color = ruler_point_map[ruler_id][0].color
+            # color = ruler_point_map[ruler_id][0].color
+            color = self.settings.draw_color
             # self.right_view.canvas.create_text(10, 10, text=text, fill="red", anchor=tk.NW, font=(None, 16))
             drawn_label = self.right_view.canvas.create_text(
                 x, y, text=f"{i + 1}: {value:.1f} cm", fill=color, anchor=tk.NW, font=(None, self.settings.font_size)
@@ -818,7 +732,8 @@ class FishMesh:
         )
         for i, (ruler_id, points) in enumerate(ruler_point_map.items()):
             # draw lines
-            color = self.tk_color_to_rgb(points[0].color)
+            # color = self.tk_color_to_rgb(points[0].color)
+            color = self.settings.draw_color
             p0 = (
                 int(points[0].x * img_width),
                 int(points[0].y * img_height)
@@ -827,7 +742,8 @@ class FishMesh:
                  int(points[1].x * img_width),
                  int(points[1].y * img_height)
             )
-            cv2.line(save_image, p0, p1, color=color, thickness=1, lineType=cv2.LINE_4)
+            rgb = self.hex_color_to_rgb(color)
+            cv2.line(save_image, p0, p1, color=rgb, thickness=1, lineType=cv2.LINE_4)
 
             lbl_x, lbl_y = label_positions[ruler_id]
             value = ruler_values[ruler_id]
@@ -840,7 +756,7 @@ class FishMesh:
                 fontFace=cv2.FONT_HERSHEY_DUPLEX,  # cv2.FONT_HERSHEY_SIMPLEX,
                 fontScale=scaled_font_size,
                 thickness=int(scaled_font_size),
-                color=color,
+                color=rgb,
             )
 
         # Draw bounding box
@@ -849,11 +765,10 @@ class FishMesh:
         max_x = int((1 - self.settings.measure_box_margin_rel) * img_width)
         max_y = int((1 - self.settings.measure_box_margin_rel) * img_height)
         # draw lines: top_left, top_right, bottom_right, bottom_left:
-        red = (255, 0, 0)
-        cv2.line(save_image, (min_x, min_y), (min_x, max_y), color=red, thickness=1, lineType=cv2.LINE_4)
-        cv2.line(save_image, (min_x, max_y), (max_x, max_y), color=red, thickness=1, lineType=cv2.LINE_4)
-        cv2.line(save_image, (max_x, max_y), (max_x, min_y), color=red, thickness=1, lineType=cv2.LINE_4)
-        cv2.line(save_image, (max_x, min_y), (min_x, min_y), color=red, thickness=1, lineType=cv2.LINE_4)
+        cv2.line(save_image, (min_x, min_y), (min_x, max_y), color=rgb, thickness=1, lineType=cv2.LINE_4)
+        cv2.line(save_image, (min_x, max_y), (max_x, max_y), color=rgb, thickness=1, lineType=cv2.LINE_4)
+        cv2.line(save_image, (max_x, max_y), (max_x, min_y), color=rgb, thickness=1, lineType=cv2.LINE_4)
+        cv2.line(save_image, (max_x, min_y), (min_x, min_y), color=rgb, thickness=1, lineType=cv2.LINE_4)
 
         save_image = cv2.cvtColor(save_image, cv2.COLOR_RGB2BGR)
         return save_image
@@ -891,6 +806,13 @@ class FishMesh:
         hex = '#{:02x}{:02x}{:02x}'.format(r, g, b)
         return ImageColor.getcolor(hex, "RGB")
 
+    def hex_color_to_rgb(self, hex: str) -> Tuple[int, int, int]:
+        _hex = hex.lstrip("#")
+        r = int(_hex[0:2], 16)
+        g = int(_hex[2:4], 16)
+        b = int(_hex[4:6], 16)
+        return r, g, b
+
     def left_click_callback(self, img_view: ImageView, create_rulers_on_click: bool, bound_to: str, event):
         if img_view.canvas_img is not None:
             x = event.x
@@ -923,7 +845,7 @@ class FishMesh:
                     rel_y = (y - img_view.y_padding) / img_view.resized_height
                     self.new_ruler_start_point = Point(
                         # rel_x, rel_y, self.num_rulers_created + 1, self.settings.colors[(self.num_rulers_created + 1) % len(self.settings.colors)]
-                        rel_x, rel_y, self.num_rulers_created + 1, self.ruler_color
+                        rel_x, rel_y, self.num_rulers_created + 1, self.settings.draw_color
                     )
                     self.new_ruler_start_point.drawing_id = self.draw_point(img_view, self.new_ruler_start_point)
                 else:
@@ -936,7 +858,7 @@ class FishMesh:
                         deepcopy(self.new_ruler_start_point),
                         Point(
                             # rel_x, rel_y, self.num_rulers_created, self.settings.colors[self.num_rulers_created % len(self.settings.colors)]
-                            rel_x, rel_y, self.num_rulers_created, self.ruler_color
+                            rel_x, rel_y, self.num_rulers_created, self.settings.draw_color
                         )
                     ])
                     img_view.canvas.delete(self.new_ruler_start_point.drawing_id)
