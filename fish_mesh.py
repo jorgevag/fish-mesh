@@ -1100,6 +1100,11 @@ class FishMesh:
 
         # create table with drawn measurements:
         df = DataFrame(ruler_info)
+
+        # add box dimensions
+        df.insert(0, "box_width_cm", self.settings.measure_box_width)
+        df.insert(1, "box_height_cm", self.settings.measure_box_height)
+
         # insert image information and image name (so data can be mapped back to file)
         # (using insert to insert image information at the front)
         for i, (field, value) in enumerate(img_info.items()):
