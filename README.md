@@ -100,6 +100,10 @@ pyenv versions
 #### 4) Create virtual environment and activate it
 ```
 virtualenv --python=/usr/bin/python3.8 venv
+# might be 
+# virtualenv -python=python3.8 venv
+# or 
+# virtualenv -python=/usr/local/bin/python3.8 venv
 source venv/bin/activate
 ```
 #### 5) install python packages
