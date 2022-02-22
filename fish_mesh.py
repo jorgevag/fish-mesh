@@ -137,18 +137,19 @@ class FishMesh:
         self.right_view.canvas = Canvas(self.image_displays, width=0, height=0, bg="white")
         # self.right_view.canvas.pack(side=RIGHT, fill="both", expand=True)
         self.mini_window_spec = RelativeComponent(x=0.8, y=0.0, w=0.2, h=0.2)
-        self.right_view.canvas.place(
-            relx=self.mini_window_spec.x,
-            rely=self.mini_window_spec.y,
-            relwidth=self.mini_window_spec.w,
-            relheight=self.mini_window_spec.h,
-        )
-        self.window.bind('<Configure>', self.resize_callback)
-
-        self.show_mini_window = True
+        self.show_mini_window = self.settings.show_mini_window_on_start
+        toggle_win_button_text = "Show"
+        if self.show_mini_window:
+            toggle_win_button_text = "Hide"
+            self.right_view.canvas.place(
+                relx=self.mini_window_spec.x,
+                rely=self.mini_window_spec.y,
+                relwidth=self.mini_window_spec.w,
+                relheight=self.mini_window_spec.h,
+            )
         self.toggle_mini_window_button = tk.Button(
             self.top_menu,
-            text="Hide",
+            text=toggle_win_button_text,
             command=self.toggle_mini_window,
             bg="white",
             # remove border:
@@ -156,6 +157,9 @@ class FishMesh:
             bd=0
         )
         self.toggle_mini_window_button.pack(side=tk.RIGHT)
+
+
+        self.window.bind('<Configure>', self.resize_callback)
 
         """
         mouse-button  click      hold&move    release
@@ -436,9 +440,7 @@ class FishMesh:
     def toggle_mini_window(self):
         if self.show_mini_window:
             self.show_mini_window = False
-            # Hack to remove mini window by giving it 0 width
-            # (had to use 0.01 to not get error while resizing window; TODO: fix resize hack)
-            self.right_view.canvas.place(relx=0.01, rely=0.01, relwidth=0.01, relheight=0.01)
+            self.right_view.canvas.place_forget()
             self.toggle_mini_window_button.configure(text="Show")
         else:
             self.show_mini_window = True
@@ -507,7 +509,6 @@ class FishMesh:
     def draw_point(self, img_view: ImageView, point: Point, color=None):
         w = img_view.resized_width
         h = img_view.resized_height
-        _color = 'IndianRed1'
         if point.color is not None:
             _color = point.color
         if color is not None:
@@ -517,7 +518,8 @@ class FishMesh:
             img_view.y_padding + int(h * point.y) - self.point_radii,
             img_view.x_padding + int(w * point.x) + self.point_radii,
             img_view.y_padding + int(h * point.y) + self.point_radii,
-            fill=_color
+            # fill=_color,
+            fill=self.settings.draw_color
         )
         return drawing
 
@@ -534,6 +536,7 @@ class FishMesh:
 
         # TODO: simplify drawing lines and points (naming and structuring should also be improved)
         # Draw lines
+        col = self.settings.draw_color
         # To get the correct pair of points we need a certain order:
         if img_view.drawn_lines:
             for line in img_view.drawn_lines:
@@ -545,10 +548,10 @@ class FishMesh:
         # order to get top_left, top_right, bottom_right, bottom_left:
         ordered_point_arr = _reorder_corner_points(point_arr, "drawing_bounding_box")
         ps = np.reshape(ordered_point_arr, (4,2))
-        img_view.drawn_lines.append(img_view.canvas.create_line(ps[0,0], ps[0,1], ps[1,0], ps[1,1], fill="red"))
-        img_view.drawn_lines.append(img_view.canvas.create_line(ps[1,0], ps[1,1], ps[2,0], ps[2,1], fill="red"))
-        img_view.drawn_lines.append(img_view.canvas.create_line(ps[2,0], ps[2,1], ps[3,0], ps[3,1], fill="red"))
-        img_view.drawn_lines.append(img_view.canvas.create_line(ps[3,0], ps[3,1], ps[0,0], ps[0,1], fill="red"))
+        img_view.drawn_lines.append(img_view.canvas.create_line(ps[0,0], ps[0,1], ps[1,0], ps[1,1], fill=col))
+        img_view.drawn_lines.append(img_view.canvas.create_line(ps[1,0], ps[1,1], ps[2,0], ps[2,1], fill=col))
+        img_view.drawn_lines.append(img_view.canvas.create_line(ps[2,0], ps[2,1], ps[3,0], ps[3,1], fill=col))
+        img_view.drawn_lines.append(img_view.canvas.create_line(ps[3,0], ps[3,1], ps[0,0], ps[0,1], fill=col))
 
         w = img_view.resized_width
         h = img_view.resized_height
@@ -566,7 +569,7 @@ class FishMesh:
                     img_view.y_padding + int(h * point.y) - self.point_radii,
                     img_view.x_padding + int(w * point.x) + self.point_radii,
                     img_view.y_padding + int(h * point.y) + self.point_radii,
-                    fill='red'
+                    fill=col
                 )
                 img_view.drawn_points.append(canvas_point)
 
@@ -575,18 +578,20 @@ class FishMesh:
         if self.measure_box_lines:
             for line in self.measure_box_lines:
                 img_view.canvas.delete(line)
+
+        col = self.settings.draw_color
         x0 = img_view.x_padding
         y0 = img_view.y_padding
-        min_x = self.settings.measure_box_margin_rel * img_view.resized_width + x0
-        min_y = self.settings.measure_box_margin_rel * img_view.resized_height + y0
-        max_x = (1 - self.settings.measure_box_margin_rel) * img_view.resized_width + x0
-        max_y = (1 - self.settings.measure_box_margin_rel) * img_view.resized_height + y0
+        min_x = self.settings.measure_box_margin_ratio * img_view.resized_width + x0
+        min_y = self.settings.measure_box_margin_ratio * img_view.resized_height + y0
+        max_x = (1 - self.settings.measure_box_margin_ratio) * img_view.resized_width + x0
+        max_y = (1 - self.settings.measure_box_margin_ratio) * img_view.resized_height + y0
         # draw lines: top_left, top_right, bottom_right, bottom_left:
         self.measure_box_lines = []
-        self.measure_box_lines.append(img_view.canvas.create_line(min_x, min_y, min_x, max_y, fill="red"))
-        self.measure_box_lines.append(img_view.canvas.create_line(min_x, max_y, max_x, max_y, fill="red"))
-        self.measure_box_lines.append(img_view.canvas.create_line(max_x, max_y, max_x, min_y, fill="red"))
-        self.measure_box_lines.append(img_view.canvas.create_line(max_x, min_y, min_x, min_y, fill="red"))
+        self.measure_box_lines.append(img_view.canvas.create_line(min_x, min_y, min_x, max_y, fill=col))
+        self.measure_box_lines.append(img_view.canvas.create_line(min_x, max_y, max_x, max_y, fill=col))
+        self.measure_box_lines.append(img_view.canvas.create_line(max_x, max_y, max_x, min_y, fill=col))
+        self.measure_box_lines.append(img_view.canvas.create_line(max_x, min_y, min_x, min_y, fill=col))
 
     # # # # # # # #
     # Draw Rulers #
@@ -737,7 +742,7 @@ class FishMesh:
         return ruler_label_position
 
     def read_rulers(self, ruler_point_map: Dict[int, List[Point]]):
-        img_to_box_scale_ratio = 1 / (1 - 2 * self.settings.measure_box_margin_rel)
+        img_to_box_scale_ratio = 1 / (1 - 2 * self.settings.measure_box_margin_ratio)
         ruler_values = {}
         for ruler_id, ruler_points in ruler_point_map.items():
             p1 = ruler_points[0]
@@ -814,10 +819,10 @@ class FishMesh:
             )
 
         # Draw bounding box
-        min_x = int(self.settings.measure_box_margin_rel * img_width)
-        min_y = int(self.settings.measure_box_margin_rel * img_height)
-        max_x = int((1 - self.settings.measure_box_margin_rel) * img_width)
-        max_y = int((1 - self.settings.measure_box_margin_rel) * img_height)
+        min_x = int(self.settings.measure_box_margin_ratio * img_width)
+        min_y = int(self.settings.measure_box_margin_ratio * img_height)
+        max_x = int((1 - self.settings.measure_box_margin_ratio) * img_width)
+        max_y = int((1 - self.settings.measure_box_margin_ratio) * img_height)
         # draw lines: top_left, top_right, bottom_right, bottom_left:
         cv2.line(save_image, (min_x, min_y), (min_x, max_y), color=rgb, thickness=1, lineType=cv2.LINE_4)
         cv2.line(save_image, (min_x, max_y), (max_x, max_y), color=rgb, thickness=1, lineType=cv2.LINE_4)
@@ -854,11 +859,11 @@ class FishMesh:
         cv2_text_height = cv2.getTextSize(text="A", fontFace=cv2_font, fontScale=font_size, thickness=font_size)[0][1]
         return font_size / cv2_text_height
 
-    def tk_color_to_rgb(self, color_name: str):
-        rgb = self.window.winfo_rgb(color_name)
-        r, g, b = [x >> 8 for x in rgb]
-        hex = '#{:02x}{:02x}{:02x}'.format(r, g, b)
-        return ImageColor.getcolor(hex, "RGB")
+    # def tk_color_to_rgb(self, color_name: str):
+    #     rgb = self.window.winfo_rgb(color_name)
+    #     r, g, b = [x >> 8 for x in rgb]
+    #     hex = '#{:02x}{:02x}{:02x}'.format(r, g, b)
+    #     return ImageColor.getcolor(hex, "RGB")
 
     def hex_color_to_rgb(self, hex: str) -> Tuple[int, int, int]:
         _hex = hex.lstrip("#")
@@ -977,7 +982,8 @@ class FishMesh:
                 start_y - self.point_radii,
                 start_x + self.point_radii,
                 start_y + self.point_radii,
-                fill=self.new_ruler_start_point.color
+                # fill=self.new_ruler_start_point.color
+                fill=self.settings.draw_color
             )
             if self.drawn_ruler_end is not None:
                 img_view.canvas.delete(self.drawn_ruler_end)
@@ -986,7 +992,8 @@ class FishMesh:
                 y - self.point_radii,
                 x + self.point_radii,
                 y + self.point_radii,
-                fill=self.new_ruler_start_point.color
+                # fill=self.new_ruler_start_point.color
+                fill=self.settings.draw_color
             )
             if self.drawn_ruler_line is not None:
                 img_view.canvas.delete(self.drawn_ruler_line)
@@ -995,7 +1002,8 @@ class FishMesh:
                 start_y,
                 x,
                 y,
-                fill=self.new_ruler_start_point.color
+                # fill=self.new_ruler_start_point.color
+                fill=self.settings.draw_color
             )
 
     def right_click_callback(self, img_view: ImageView, event):
@@ -1045,10 +1053,10 @@ class FishMesh:
             x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
             y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
         elif bound_to == "box":
-            min_x = self.settings.measure_box_margin_rel * img_view.resized_width + img_view.x_padding
-            min_y = self.settings.measure_box_margin_rel * img_view.resized_height + img_view.y_padding
-            max_x = (1 - self.settings.measure_box_margin_rel) * img_view.resized_width + img_view.x_padding
-            max_y = (1 - self.settings.measure_box_margin_rel) * img_view.resized_height + img_view.y_padding
+            min_x = self.settings.measure_box_margin_ratio * img_view.resized_width + img_view.x_padding
+            min_y = self.settings.measure_box_margin_ratio * img_view.resized_height + img_view.y_padding
+            max_x = (1 - self.settings.measure_box_margin_ratio) * img_view.resized_width + img_view.x_padding
+            max_y = (1 - self.settings.measure_box_margin_ratio) * img_view.resized_height + img_view.y_padding
             x = max(min_x, x)
             y = max(min_y, y)
             x = min(max_x, x)
@@ -1069,7 +1077,7 @@ class FishMesh:
 
     def warp_image(self):
         corners_ndarray = self.points_to_ndarray(self.left_view.points)
-        self.warped_image = warp_image(self.img, corners_ndarray, self.settings.measure_box_margin_rel)
+        self.warped_image = warp_image(self.img, corners_ndarray, self.settings.measure_box_margin_ratio)
         self.warp_activated = True
 
     def points_to_ndarray(self, points: List[Point]):

@@ -2,9 +2,12 @@ import tkinter as tk
 from typing import Dict, Optional, Any, Union
 from tkinter import simpledialog, colorchooser, messagebox
 import json
+from functools import partial
 
 from dataclasses import dataclass, fields, asdict
-from settings import Settings, SettingsError, DEFAULT_SETTINGS_PATH
+from settings import (
+    Settings, SettingsError, DEFAULT_SETTINGS_PATH, SETTING_DESCRIPTIONS
+)
 
 
 @dataclass
@@ -16,31 +19,49 @@ class SettingsDialogField:
 
 
 class SettingsDialog(tk.simpledialog.Dialog):
-    def __init__(self, parent, title, field_width=40, settings: Optional[Settings] = None):
+    def __init__(self, parent, title, field_width=25, settings: Optional[Settings] = None):
         self.fields: Dict[str, SettingsDialogField] = {}
+        max_width_required = 0
         if settings is not None:
             self.selected_draw_color = settings.draw_color
+            self.show_mini_window = settings.show_mini_window_on_start
             for field in fields(settings):
                 self.fields[field.name] = SettingsDialogField(
                     value=getattr(settings, field.name),
                     type=field.type
                 )
+                max_width_required = max(
+                    max_width_required,
+                    len(var_to_text(field.name))
+                )
         else:  # default settings values from class
             self.selected_draw_color = Settings.draw_color
+            self.show_mini_window = Settings.show_mini_window_on_start
             for field in fields(Settings):
                 self.fields[field.name] = SettingsDialogField(
                     value=getattr(Settings, field.name),
                     type=field.type
                 )
-        self.field_width = field_width
+                max_width_required = max(
+                    max_width_required,
+                    len(var_to_text(field.name))
+                )
+        self.field_width = max_width_required
         super().__init__(parent, title)
 
     def body(self, frame):
-        last_row = 0
         for row, field in enumerate(self.fields):
             # print(field.name, field.type, getattr(FishMeshSettings, field.name))
-            self.fields[field].label = tk.Label(frame, width=self.field_width, text=var_to_text(field))
+            self.fields[field].label = tk.Label(
+                frame,
+                width=self.field_width,
+                text=var_to_text(field) + ": ",
+                anchor="e",
+                justify=tk.RIGHT,
+            )
             self.fields[field].label.grid(row=row, column=0)
+            self.fields[field].label.bind("<Enter>", partial(self.tooltip_enter, field))
+            self.fields[field].label.bind("<Leave>", self.tooltip_leave)
             if field == "draw_color":
                 self.fields[field].entry = tk.Button(
                     frame,
@@ -49,10 +70,33 @@ class SettingsDialog(tk.simpledialog.Dialog):
                     command=self.choose_color,
                 )
                 self.fields[field].entry.grid(row=row, column=1)
+            elif field == "show_mini_window_on_start":
+                self.fields[field].entry = tk.Button(
+                    frame,
+                    text="Yes" if self.fields[field].value else "No",
+                    command=self.toggle_show_mini_window,
+                )
+                self.fields[field].entry.grid(row=row, column=1)
             else:
-                self.fields[field].entry = tk.Entry(frame, width=self.field_width)
+                self.fields[field].entry = tk.Entry(frame)#, width=self.field_width)
                 self.fields[field].entry.insert(tk.END, self.fields[field].value)  # show existing value
                 self.fields[field].entry.grid(row=row, column=1)
+
+        # self.tooltip_title = tk.Label(
+        #     frame,
+        #     text="",
+        #     font=('Helvetica', 12, 'bold'),
+        #     anchor="nw",
+        #     justify=tk.LEFT
+        # )
+        # self.tooltip_title.grid(row=1, column=3)
+        self.tooltip = tk.Label(
+            frame,
+            text="",
+            anchor="nw",
+            justify=tk.LEFT
+        )
+        self.tooltip.grid(row=0, column=3, rowspan=len(self.fields) - 1)
 
         return frame
 
@@ -72,6 +116,15 @@ class SettingsDialog(tk.simpledialog.Dialog):
         self.bind("<Return>", lambda event: self.apply_pressed)
         self.bind("<Escape>", lambda event: self.destroy)
 
+    def tooltip_enter(self, field: str, event):
+        if field in SETTING_DESCRIPTIONS:
+            # self.tooltip_title.configure(text=var_to_text(field))
+            self.tooltip.configure(text=SETTING_DESCRIPTIONS[field])
+
+    def tooltip_leave(self, event):
+        # self.tooltip_title.configure(text="")
+        self.tooltip.configure(text="")
+
     def apply_pressed(self):
         field_errors = self.validate_fields()
         if field_errors:
@@ -84,7 +137,13 @@ class SettingsDialog(tk.simpledialog.Dialog):
         rgb, hex = colorchooser.askcolor(title="Choose color")
         if hex is not None:
             self.selected_draw_color = hex
-        self.fields["draw_color"].entry.configure(text=f"", background=hex)
+        self.fields["draw_color"].entry.configure(text="", background=hex)
+
+    def toggle_show_mini_window(self):
+        self.show_mini_window = not(self.fields["show_mini_window_on_start"].value)
+        self.fields["show_mini_window_on_start"].entry.configure(
+            text=("Yes" if self.show_mini_window else "No")
+        )
 
     def read_entries(self):
         for field in self.fields:
@@ -92,6 +151,8 @@ class SettingsDialog(tk.simpledialog.Dialog):
                 self.fields[field].value = self.fields[field].entry.get()
             elif field == "draw_color":
                 self.fields["draw_color"].value = self.selected_draw_color
+            elif field == "show_mini_window_on_start":
+                self.fields["show_mini_window_on_start"].value = self.show_mini_window
             else:
                 TypeError(
                     "Unknown type for 'entry' property to receive"
