@@ -6,3 +6,5 @@ venv3.9/
 pyinstaller/
 __pycache__/
 fish-mesh.exe
+fish-mesh-settings.json
+.python-version
