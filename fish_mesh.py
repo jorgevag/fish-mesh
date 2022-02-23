@@ -335,8 +335,9 @@ class FishMesh:
             # * when larger than canvas, scale will be most negative for dimension that "overshoots" the most
             scaling = min(required_width_scaling, required_height_scaling)
 
-            new_img_width = int(img_width * scaling)
-            new_img_height = int(img_height * scaling)
+            # minimal 1 pixel width to avoid error in cv2.resize()
+            new_img_width = max(int(img_width * scaling), 1)
+            new_img_height = max(int(img_height * scaling), 1)
 
             resized = cv2.resize(img, (new_img_width, new_img_height), interpolation=cv2.INTER_AREA)
             resized_width = new_img_width
