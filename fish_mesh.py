@@ -136,6 +136,7 @@ class FishMesh:
         self.right_view = ImageView()
         self.right_view.canvas = Canvas(self.image_displays, width=0, height=0, bg="white")
         # self.right_view.canvas.pack(side=RIGHT, fill="both", expand=True)
+        self.in_box_drawing_window = True
         self.mini_window_spec = RelativeComponent(x=0.8, y=0.0, w=0.2, h=0.2)
         self.show_mini_window = self.settings.show_mini_window_on_start
         toggle_win_button_text = "Show"
@@ -244,25 +245,48 @@ class FishMesh:
     def select_and_load_file(self):
         selected_file = self.select_file()
         if selected_file:
-            self.selected_input_file = selected_file
-            self.img = self.load_image(selected_file)
-
-            # After file has loaded, show image, and draw initial bounding box and warped image
-            self.init_bounding_box(self.left_view)
-            self.warp_image()
-            self.draw()
+            try:
+                self.img = self.load_image(selected_file)
+            except Exception:
+                messagebox.showerror(
+                    "Image File Error",
+                    "Could not load image. Make sure the selected file is an image file."
+                )
+            else:
+                # Image successfully loaded
+                self.selected_input_file = selected_file
+                # Clear any potential drawings from a previous image:
+                self.clear_all_drawings()
+                # Move to the bounding box drawing view:
+                self.go_to_box_drawing_window()
+                # After file has loaded, show image, and draw initial bounding box and warped image
+                self.init_bounding_box(self.left_view)
+                self.warp_image()
+                self.draw()
 
     def select_file(self):
         """opening file explorer window"""
         selected_input_file = filedialog.askopenfilename(
             initialdir=Path.cwd().__str__(),
             title="Select a File",
-            filetypes=(
-                ("all files", "*.*"),
-                ("Text files", "*.txt*"),
-            )
+            # filetypes=(
+            #     ("all files", "*.*"),
+            #     ("Text files", "*.txt*"),
+            # )
         )
         return selected_input_file
+
+    def clear_all_drawings(self):
+        # Note: order of steps matter
+        # 1) Delete stored drawings from canvas:
+        clear_drawings(self.left_view)
+        clear_drawings(self.right_view)
+        self.clear_ruler_label_drawings()
+        # 2) Clear containers storing the drawing references:
+        self.right_view.points = None
+        self.right_view.lines = None
+        self.num_rulers_created = 0
+        self.drawn_ruler_labels = []
 
     def change_settings(self):
         dialog = SettingsDialog(title="Settings", parent=self.window, settings=self.settings)
@@ -404,6 +428,13 @@ class FishMesh:
             self.draw()
 
     def go_to_measurement_window(self):
+        already_in_measurement_window = (
+            not self.in_box_drawing_window
+        )
+        if already_in_measurement_window:
+            return
+
+        self.in_box_drawing_window = False
         self.left_view.canvas.pack_forget()
         self.right_view.canvas.pack_forget()
 
@@ -418,6 +449,9 @@ class FishMesh:
         self.right_view.canvas.pack(fill="both", expand=True)
 
     def go_to_box_drawing_window(self):
+        if self.in_box_drawing_window:
+            return
+        self.in_box_drawing_window = True
         self.left_view.canvas.pack_forget()
         self.right_view.canvas.pack_forget()
 
@@ -618,14 +652,9 @@ class FishMesh:
         w = img_view.resized_width
         h = img_view.resized_height
 
-        # Before drawing, delete existing lines:
-        if img_view.drawn_lines:
-            for line in img_view.drawn_lines:
-                img_view.canvas.delete(line)
-        # Delete the previously drawn points:
-        if img_view.drawn_points:
-            for drawn_corner in img_view.drawn_points:
-                img_view.canvas.delete(drawn_corner)
+        # Before drawing, clear previous drawings:
+        clear_drawings(img_view)
+
         # Draw the ruler's line
         img_view.drawn_lines = []
         img_view.drawn_points = []
@@ -758,13 +787,12 @@ class FishMesh:
         """
         draw ruler labels with the measurement
         """
+
+        # Clear existing ruler labels before drawing new ones:
+        self.clear_ruler_label_drawings()
+
         label_positions = self.find_ruler_label_position(ruler_point_map)
         ruler_values = self.read_rulers(ruler_point_map)
-        # ruler_percentage_length = ruler_length * 100
-        # text = f"relative length: {ruler_percentage_length:.2f} %"
-        if self.drawn_ruler_labels:
-            for label in self.drawn_ruler_labels:
-                self.right_view.canvas.delete(label)
         for i, ruler_id in enumerate(ruler_point_map.keys()):
             x, y = label_positions[ruler_id]
             value = ruler_values[ruler_id]
@@ -775,6 +803,11 @@ class FishMesh:
                 x, y, text=f"{i + 1}: {value:.1f} cm", fill=color, anchor=tk.NW, font=(None, self.settings.font_size)
             )
             self.drawn_ruler_labels.append(drawn_label)
+
+    def clear_ruler_label_drawings(self):
+        if self.drawn_ruler_labels:
+            for label in self.drawn_ruler_labels:
+                self.right_view.canvas.delete(label)
 
     def create_save_image(self):
         """
@@ -1129,6 +1162,17 @@ class FishMesh:
         save_image = self.create_save_image()
         filename = path / create_save_image_name(save_id)
         cv2.imwrite(filename=str(filename), img=save_image)
+
+
+def clear_drawings(img_view: ImageView):
+    # delete existing lines:
+    if img_view.drawn_lines:
+        for line in img_view.drawn_lines:
+            img_view.canvas.delete(line)
+    # Delete drawn points:
+    if img_view.drawn_points:
+        for drawn_corner in img_view.drawn_points:
+            img_view.canvas.delete(drawn_corner)
 
 
 def create_save_image_name(save_id: str) -> str:
