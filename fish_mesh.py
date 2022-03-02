@@ -319,6 +319,7 @@ class FishMesh:
         )
         if file_handle is not None:
             filename = file_handle.name
+            file_handle.__exit__()  # close file so it can be deleted
             Path(filename).unlink()
             return filename
 
