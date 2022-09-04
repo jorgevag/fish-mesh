@@ -95,9 +95,9 @@ class FishMesh:
             bg="white",
             text="Browse Files",
             command=self.select_and_load_file,
-            # remove border:
-            highlightthickness=0,
-            bd=0
+            # # remove border:
+            # highlightthickness=0,
+            # bd=0
         )
         # self.input_file_explorer_button.pack(side=LEFT, fill="x", expand=True)
         self.input_file_explorer_button.pack(side=tk.LEFT)
@@ -107,9 +107,9 @@ class FishMesh:
             bg="white",
             text="Settings",
             command=self.change_settings,
-            # remove border:
-            highlightthickness=0,
-            bd=0
+            # # remove border:
+            # highlightthickness=0,
+            # bd=0
         )
         self.settings_button.pack(side=tk.RIGHT)
 
@@ -153,9 +153,9 @@ class FishMesh:
             text=toggle_win_button_text,
             command=self.toggle_mini_window,
             bg="white",
-            # remove border:
-            highlightthickness=0,
-            bd=0
+            # # remove border:
+            # highlightthickness=0,
+            # bd=0
         )
         self.toggle_mini_window_button.pack(side=tk.RIGHT)
 
@@ -195,9 +195,9 @@ class FishMesh:
             text="\u21BB",  # unicode char for anticlockwise circular arrow
             command=self.rotate_image_clockwise,
             bg="white",
-            # remove border:
-            highlightthickness=0,
-            bd=0
+            # # remove border:
+            # highlightthickness=0,
+            # bd=0
         )
         self.rotate_anticlockwise_button.pack(side=tk.LEFT)
         self.rotate_clockwise_button = Button(
@@ -205,9 +205,9 @@ class FishMesh:
             text="\u21BA",  # unicode char for anticlockwise circular arrow
             command=self.rotate_image_anticlockwise,
             bg="white",
-            # remove border:
-            highlightthickness=0,
-            bd=0
+            # # remove border:
+            # highlightthickness=0,
+            # bd=0
         )
         self.rotate_clockwise_button.pack(side=tk.LEFT)
 
@@ -216,9 +216,9 @@ class FishMesh:
             bg="white",
             text="To measurement window",
             command=self.go_to_measurement_window,
-            # remove border:
-            highlightthickness=0,
-            bd=0
+            # # remove border:
+            # highlightthickness=0,
+            # bd=0
         )
         self.to_measurement_window_button.pack(side=tk.LEFT)
         self.to_box_drawing_window_button = Button(
@@ -227,9 +227,9 @@ class FishMesh:
             # text="\u2190",  # Arrow
             text="Back to box drawing window",  # Arrow
             command=self.go_to_box_drawing_window,
-            # remove border:
-            highlightthickness=0,
-            bd=0
+            # # remove border:
+            # highlightthickness=0,
+            # bd=0
         )
 
         self.save_button = Button(
@@ -237,9 +237,9 @@ class FishMesh:
             text="Save measurements",
             command=self.save_callback,
             bg="white",
-            # remove border:
-            highlightthickness=0,
-            bd=0
+            # # remove border:
+            # highlightthickness=0,
+            # bd=0
         )
 
     def select_and_load_file(self):
