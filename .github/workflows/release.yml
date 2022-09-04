@@ -39,7 +39,7 @@ jobs:
         #asset_path: ./uploads/macos.exe
         #asset_name: macos.exe
         #asset_content_type: application/octet-stream
-        asset_path: ./uploads/macos.txt
+        asset_path: fish-mesh/uploads/macos.txt
         asset_name: macos.txt
         asset_content_type: text/plain
     - name: upload linux
@@ -52,7 +52,7 @@ jobs:
 #        asset_path: ./uploads/linux.exe
 #        asset_name: linux.exe
 #        asset_content_type: application/octet-stream
-        asset_path: ./uploads/linux.txt
+        asset_path: fish-mesh/uploads/linux.txt
         asset_name: linux.txt
         asset_content_type: text/plain
     - name: upload windows
@@ -65,7 +65,7 @@ jobs:
 #        asset_path: ./uploads/windows.exe
 #        asset_name: windows.exe
 #        asset_content_type: application/octet-stream
-        asset_path: ./uploads/windows.txt
+        asset_path: fish-mesh/uploads/windows.txt
         asset_name: windows.txt
         asset_content_type: text/plain
 
