@@ -25,9 +25,10 @@ jobs:
         draft: true
         prerelease: true
     - name: download artifacts
-      uses: actions/download-artifact@v1
+      uses: actions/download-artifact@v3
       with:
-        name: uploads    
+        name: uploads
+        path: uploads
     - name: upload macos
       id: upload-macos 
       uses: actions/upload-release-asset@v1.0.1
@@ -35,11 +36,10 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        ##asset_path: ./uploads/macos.exe
-        ##asset_name: macos.exe
-        ##asset_content_type: application/octet-stream
-        #asset_path: ./uploads/macos.txt
-        asset_path: macos.txt
+        #asset_path: ./uploads/macos.exe
+        #asset_name: macos.exe
+        #asset_content_type: application/octet-stream
+        asset_path: ./uploads/macos.txt
         asset_name: macos.txt
         asset_content_type: text/plain
     - name: upload linux
@@ -52,8 +52,7 @@ jobs:
 #        asset_path: ./uploads/linux.exe
 #        asset_name: linux.exe
 #        asset_content_type: application/octet-stream
-        #asset_path: ./uploads/linux.txt
-        asset_path: linux.txt
+        asset_path: ./uploads/linux.txt
         asset_name: linux.txt
         asset_content_type: text/plain
     - name: upload windows
@@ -66,8 +65,7 @@ jobs:
 #        asset_path: ./uploads/windows.exe
 #        asset_name: windows.exe
 #        asset_content_type: application/octet-stream
-        #asset_path: ./uploads/windows.txt
-        asset_path: windows.txt
+        asset_path: ./uploads/windows.txt
         asset_name: windows.txt
         asset_content_type: text/plain
 
@@ -82,11 +80,11 @@ jobs:
     - name: zip macos artifact
       run: |
         zip -r macos.zip macos.txt
-#    - name: upload macos artifact
-#      uses: actions/upload-artifact@v3
-#      with:
-#        name: uploads
-#        path: macos.zip
+    - name: upload macos artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: uploads
+        path: macos.zip
 
   build-linux:
 
@@ -100,11 +98,11 @@ jobs:
     - name: zip linux artifact
       run: |
         zip -r linux linux.txt
-#    - name: upload linux artifact
-#      uses: actions/upload-artifact@v3
-#      with:
-#        name: uploads
-#        path: linux.zip
+    - name: upload linux artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: uploads
+        path: linux.zip
 
   build-windows:
 
@@ -118,8 +116,8 @@ jobs:
     - name: zip win artifact
       run: |
         powershell Compress-Archive windows.txt windows.zip
-#    - name: upload windows artifact
-#      uses: actions/upload-artifact@v3
-#      with:
-#        name: uploads
-#        path: windows.zip
+    - name: upload windows artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: uploads
+        path: windows.zip
