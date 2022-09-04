@@ -1,0 +1,122 @@
+name: Release with Pyinstaller Assets (Ubuntu, Windows, MacOs)
+# based on https://gist.github.com/youhide/121750fc4878801ea8e908080b535beb
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  upload-release:
+
+    runs-on: ubuntu-20.04
+    needs: [build-macos, build-linux, build-windows]
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: create release
+      id: create_release
+      uses: actions/create-release@master
+      env:
+        GITHUB_TOKEN: ${{ secrets.TOKEN }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: TEST Release ${{ github.ref }}
+        draft: true
+        prerelease: true
+    - name: download artifacts
+      uses: actions/download-artifact@v1
+      with:
+        name: uploads    
+    - name: upload macos
+      id: upload-macos 
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        #asset_path: ./uploads/macos.exe
+        #asset_name: macos.exe
+        #asset_content_type: application/octet-stream
+        asset_path: ./uploads/macos.txt
+        asset_name: macos.txt
+        asset_content_type: text/plain
+    - name: upload linux
+      id: upload-linux
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+#        asset_path: ./uploads/linux.exe
+#        asset_name: linux.exe
+#        asset_content_type: application/octet-stream
+        asset_path: ./uploads/linux.txt
+        asset_name: linux.txt
+        asset_content_type: text/plain
+    - name: upload windows
+      id: upload-windows
+      uses: actions/upload-release-asset@v1.0.1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+#        asset_path: ./uploads/windows.exe
+#        asset_name: windows.exe
+#        asset_content_type: application/octet-stream
+        asset_path: ./uploads/windows.txt
+        asset_name: windows.txt
+        asset_content_type: text/plain
+
+  build-macos:
+    runs-on: macOS-10.15
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: create text file for testing upload artifact - macos
+      run: |
+        touch macos.txt
+    - name: zip macos artifact
+      run: |
+        zip -r macos macos.txt
+    - name: upload macos artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: uploads
+        path: macos.zip                    
+
+  build-linux:
+
+    runs-on: ubuntu-20.04
+
+    steps:
+    - uses: actions/checkout@v1
+    - name: create text file for testing upload artifact - linux
+      run: |
+        touch linux.txt
+    - name: zip linux artifact
+      run: |
+        zip -r linux linux.txt
+    - name: upload linux artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: uploads
+        path: linux.zip        
+
+  build-windows:
+
+    runs-on: windows-2019
+
+    steps:
+    - name: create text file for testing upload artifact - windows
+      shell: bash
+      run: |
+        touch windows.txt
+    - name: zip win artifact
+      run: |
+        powershell Compress-Archive windows.txt windows.zip
+    - name: upload windows artifact
+      uses: actions/upload-artifact@v1
+      with:
+        name: uploads
+        path: windows.zip
