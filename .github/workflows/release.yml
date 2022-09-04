@@ -24,28 +24,11 @@ jobs:
         release_name: TEST Release ${{ github.ref }}
         draft: true
         prerelease: true
-    - name: check working dir
-      run: |
-        echo "PWD: $PWD"
-        ls -a
     - name: download artifacts
       uses: actions/download-artifact@v3
       with:
         name: uploads
         path: uploads
-    - name: check working dir
-      run: |
-        echo "PWD: $PWD"
-        ls -a
-        echo ""
-        echo "moving into uploads..."
-        cd uploads
-        echo ""
-        echo "listing..."
-        ls -a
-        echo ""
-        echo "moving up again"
-        cd ..
     - name: upload macos
       id: upload-macos 
       uses: actions/upload-release-asset@v1.0.1
@@ -56,9 +39,9 @@ jobs:
         #asset_path: ./uploads/macos.exe
         #asset_name: macos.exe
         #asset_content_type: application/octet-stream
-        asset_path: ./uploads/macos.txt
-        asset_name: macos.txt
-        asset_content_type: text/plain
+        asset_path: ./uploads/macos.zip
+        asset_name: macos.zip
+        asset_content_type: application/zip
     - name: upload linux
       id: upload-linux
       uses: actions/upload-release-asset@v1.0.1
@@ -69,9 +52,9 @@ jobs:
 #        asset_path: ./uploads/linux.exe
 #        asset_name: linux.exe
 #        asset_content_type: application/octet-stream
-        asset_path: ./uploads/linux.txt
-        asset_name: linux.txt
-        asset_content_type: text/plain
+        asset_path: ./uploads/linux.zip
+        asset_name: linux.zip
+        asset_content_type: application/zip
     - name: upload windows
       id: upload-windows
       uses: actions/upload-release-asset@v1.0.1
@@ -82,9 +65,9 @@ jobs:
 #        asset_path: ./uploads/windows.exe
 #        asset_name: windows.exe
 #        asset_content_type: application/octet-stream
-        asset_path: ./uploads/windows.txt
-        asset_name: windows.txt
-        asset_content_type: text/plain
+        asset_path: ./uploads/windows.zip
+        asset_name: windows.zip
+        asset_content_type: application/zip
 
   build-macos:
     runs-on: macOS-10.15
