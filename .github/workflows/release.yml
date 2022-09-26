@@ -1,5 +1,4 @@
 name: Release with Pyinstaller Assets (Ubuntu, Windows, MacOs)
-# based on https://gist.github.com/youhide/121750fc4878801ea8e908080b535beb
 
 on:
   push:
@@ -9,7 +8,8 @@ on:
 jobs:
   upload-release:
     runs-on: ubuntu-20.04
-    needs: [build-macos, build-linux, build-windows]
+#    needs: [build-macos, build-linux, build-windows]
+    needs: [build-linux]
     steps:
     - uses: actions/checkout@v1
     - name: create release
@@ -27,13 +27,13 @@ jobs:
       with:
         name: uploads
         path: uploads
-    - name: Upload release asset macos
-      uses: softprops/action-gh-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        files: ./uploads/fish-mesh-ubuntu-python3-10-macos10-15.zip
+#    - name: Upload release asset macos
+#      uses: softprops/action-gh-release@v1
+#      env:
+#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#      if: startsWith(github.ref, 'refs/tags/')
+#      with:
+#        files: ./uploads/fish-mesh-ubuntu-python3-10-macos10-15.zip
 
     - name: Upload release asset linux
       uses: softprops/action-gh-release@v1
@@ -43,39 +43,39 @@ jobs:
       with:
         files: ./uploads/fish-mesh-ubuntu-python3-10-ubuntu20-04.zip
 
-    - name: Upload release asset windows
-      uses: softprops/action-gh-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      if: startsWith(github.ref, 'refs/tags/')
-      with:
-        files: ./uploads/fish-mesh-python3-10-windows2019.zip
+#    - name: Upload release asset windows
+#      uses: softprops/action-gh-release@v1
+#      env:
+#        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#      if: startsWith(github.ref, 'refs/tags/')
+#      with:
+#        files: ./uploads/fish-mesh-python3-10-windows2019.zip
 
-  build-macos:
-    runs-on: macOS-10.15
-    steps:
-    - uses: actions/checkout@v1
-    - name: build executable with pyinstaller - macos
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.10"
-      run: |
-        pip install -r ./requirements.txt
-        pyinstaller fish_mesh.py \
-          --name fish-mesh.exe \
-          --onefile \
-          --hidden-import='PIL._tkinter_finder' \
-          --windowed  # avoid console on windows systems
-        mv dist/fish-mesh.exe .
-#        chmod +x fish-mesh.exe
-    - name: zip executable - macos
-      run: |
-        zip -r fish-mesh-ubuntu-python3-10-macos10-15 fish-mesh.exe
-    - name: upload artifact - linux
-      uses: actions/upload-artifact@v3
-      with:
-        name: uploads
-        path: fish-mesh-ubuntu-python3-10-macos10-15.zip
+#  build-macos:
+#    runs-on: macOS-10.15
+#    steps:
+#    - uses: actions/checkout@v1
+#    - name: build executable with pyinstaller - macos
+#      uses: actions/setup-python@v4
+#      with:
+#        python-version: "3.10"
+#      run: |
+#        pip install -r ./requirements.txt
+#        pyinstaller fish_mesh.py \
+#          --name fish-mesh.exe \
+#          --onefile \
+#          --hidden-import='PIL._tkinter_finder' \
+#          --windowed  # avoid console on windows systems
+#        mv dist/fish-mesh.exe .
+##        chmod +x fish-mesh.exe
+#    - name: zip executable - macos
+#      run: |
+#        zip -r fish-mesh-ubuntu-python3-10-macos10-15 fish-mesh.exe
+#    - name: upload artifact - linux
+#      uses: actions/upload-artifact@v3
+#      with:
+#        name: uploads
+#        path: fish-mesh-ubuntu-python3-10-macos10-15.zip
 
   build-linux:
 
@@ -105,27 +105,27 @@ jobs:
         name: uploads
         path: fish-mesh-ubuntu-python3-10-ubuntu20-04.zip
 
-  build-windows:
-    runs-on: windows-2019
-    steps:
-    - name: build executable with pyinstaller - windows
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.10"
-      run: |
-        pip install -r .\requirements.txt
-        pyinstaller fish_mesh.py^
-          --name fish-mesh.exe^
-          --onefile^
-          --hidden-import='PIL._tkinter_finder'^
-          --windowed  :: avoid console on windows systems
-        move .\dist\fish-mesh.exe \.
-        # chmod +x fish-mesh.exe
-    - name: zip win artifact
-      run: |
-        powershell Compress-Archive fish-mesh-python3-10-windows2019 fish-mesh-python3-10-windows2019.zip
-    - name: upload windows artifact
-      uses: actions/upload-artifact@v3
-      with:
-        name: uploads
-        path: fish-mesh-python3-10-windows2019.zip
+#  build-windows:
+#    runs-on: windows-2019
+#    steps:
+#    - name: build executable with pyinstaller - windows
+#      uses: actions/setup-python@v4
+#      with:
+#        python-version: "3.10"
+#      run: |
+#        pip install -r .\requirements.txt
+#        pyinstaller fish_mesh.py^
+#          --name fish-mesh.exe^
+#          --onefile^
+#          --hidden-import='PIL._tkinter_finder'^
+#          --windowed  :: avoid console on windows systems
+#        move .\dist\fish-mesh.exe \.
+#        # chmod +x fish-mesh.exe
+#    - name: zip win artifact
+#      run: |
+#        powershell Compress-Archive fish-mesh-python3-10-windows2019 fish-mesh-python3-10-windows2019.zip
+#    - name: upload windows artifact
+#      uses: actions/upload-artifact@v3
+#      with:
+#        name: uploads
+#        path: fish-mesh-python3-10-windows2019.zip
