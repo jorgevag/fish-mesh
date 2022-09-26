@@ -33,37 +33,49 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: ./uploads/macos.zip
+        files: ./uploads/fish-mesh-ubuntu-python3-10-macos10-15.zip
+
     - name: Upload release asset linux
       uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: ./uploads/linux.zip
+        files: ./uploads/fish-mesh-ubuntu-python3-10-ubuntu20-04.zip
+
     - name: Upload release asset windows
       uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       if: startsWith(github.ref, 'refs/tags/')
       with:
-        files: ./uploads/windows.zip
+        files: ./uploads/fish-mesh-python3-10-windows2019.zip
 
   build-macos:
     runs-on: macOS-10.15
     steps:
     - uses: actions/checkout@v1
-    - name: create text file for testing upload artifact - macos
+    - name: build executable with pyinstaller - macos
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
       run: |
-        touch macos.txt
-    - name: zip macos artifact
+        pip install -r ./requirements.txt
+        pyinstaller fish_mesh.py \
+          --name fish-mesh.exe \
+          --onefile \
+          --hidden-import='PIL._tkinter_finder' \
+          --windowed  # avoid console on windows systems
+        mv dist/fish-mesh.exe .
+#        chmod +x fish-mesh.exe
+    - name: zip executable - macos
       run: |
-        zip -r macos.zip macos.txt
-    - name: upload macos artifact
+        zip -r fish-mesh-ubuntu-python3-10-macos10-15 fish-mesh.exe
+    - name: upload artifact - linux
       uses: actions/upload-artifact@v3
       with:
         name: uploads
-        path: macos.zip
+        path: fish-mesh-ubuntu-python3-10-macos10-15.zip
 
   build-linux:
 
@@ -71,32 +83,49 @@ jobs:
 
     steps:
     - uses: actions/checkout@v1
-    - name: create text file for testing upload artifact - linux
+    - name: build executable with pyinstaller - linux
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
       run: |
-        touch linux.txt
-    - name: zip linux artifact
+        pip install -r ./requirements.txt
+        pyinstaller fish_mesh.py \
+          --name fish-mesh.exe \
+          --onefile \
+          --hidden-import='PIL._tkinter_finder' \
+          --windowed  # avoid console on windows systems
+        mv dist/fish-mesh.exe .
+        chmod +x fish-mesh.exe
+    - name: zip executable - linux
       run: |
-        zip -r linux linux.txt
-    - name: upload linux artifact
+        zip -r fish-mesh-ubuntu-python3-10-ubuntu20-04 fish-mesh.exe
+    - name: upload artifact - linux
       uses: actions/upload-artifact@v3
       with:
         name: uploads
-        path: linux.zip
+        path: fish-mesh-ubuntu-python3-10-ubuntu20-04.zip
 
   build-windows:
-
     runs-on: windows-2019
-
     steps:
-    - name: create text file for testing upload artifact - windows
-      shell: bash
+    - name: build executable with pyinstaller - windows
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.10"
       run: |
-        touch windows.txt
+        pip install -r .\requirements.txt
+        pyinstaller fish_mesh.py^
+          --name fish-mesh.exe^
+          --onefile^
+          --hidden-import='PIL._tkinter_finder'^
+          --windowed  :: avoid console on windows systems
+        move .\dist\fish-mesh.exe \.
+        # chmod +x fish-mesh.exe
     - name: zip win artifact
       run: |
-        powershell Compress-Archive windows.txt windows.zip
+        powershell Compress-Archive fish-mesh-python3-10-windows2019 fish-mesh-python3-10-windows2019.zip
     - name: upload windows artifact
       uses: actions/upload-artifact@v3
       with:
         name: uploads
-        path: windows.zip
+        path: fish-mesh-python3-10-windows2019.zip
