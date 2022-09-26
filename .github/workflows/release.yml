@@ -90,6 +90,7 @@ jobs:
       run: |
         apt-get update && apt-get install -y \
           libgomp1 gcc g++
+        pip install --upgrade pip
         pip install --no-cache-dir -r ./requirements.txt
         pyinstaller fish_mesh.py \
           --name fish-mesh.exe \
