@@ -340,20 +340,46 @@ class FishMesh:
 
     def resize_views(self):
         if self.left_view.img is not None:
-            img, w, h = self.resize_image(self.left_view.img, self.left_view.canvas)
+            img_width = len(self.img[0])
+            img_height = len(self.img)
+            img, w, h = self.resize_image(self.left_view.img, self.left_view.canvas, img_width, img_height)
             self.left_view.resized_img = img
             self.left_view.resized_width = w
             self.left_view.resized_height = h
 
         if self.right_view.img is not None:
-            img, w, h = self.resize_image(self.right_view.img, self.right_view.canvas)
+
+            img_width = len(self.img[0])
+            img_height = len(self.img)
+            # get aspect ratio from bounding box (to estimate aspect ratio of warped image)
+            point_arr = np.stack(
+                [np.array([p.x * img_width, p.y * img_height]) for p in self.left_view.points]
+            )
+            # order to get top_left, top_right, bottom_right, bottom_left:
+            ordered_point_arr = _reorder_corner_points(point_arr, "drawing_bounding_box")
+            ps = np.reshape(ordered_point_arr, (4, 2))
+            left_height = np.sqrt((ps[0, 0] - ps[3, 0])**2 + (ps[0, 1] - ps[3, 1])**2)
+            right_height = np.sqrt((ps[1, 0] - ps[2, 0])**2 + (ps[1, 1] - ps[2, 1])**2)
+            top_width = np.sqrt((ps[0, 0] - ps[1, 0])**2 + (ps[0, 1] - ps[1, 1])**2)
+            bottom_width = np.sqrt((ps[2, 0] - ps[3, 0])**2 + (ps[2, 1] - ps[3, 1])**2)
+
+            warped_height = int(np.mean([left_height, right_height]))
+            warped_width = int(np.mean([top_width, bottom_width]))
+
+            if warped_height > 0 and warped_width > 0:
+                _width = warped_width
+                _height = warped_height
+            else:
+                _width = img_width
+                _height = img_height
+            img, w, h = self.resize_image(self.right_view.img, self.right_view.canvas, _width, _height)
             self.right_view.resized_img = img
             self.right_view.resized_width = w
             self.right_view.resized_height = h
 
-    def resize_image(self, img, canvas: tk.Canvas, preserve_aspect_ratio=True):
-        img_width = len(img[0])
-        img_height = len(img)
+    def resize_image(self, img, canvas: tk.Canvas, img_width: int, img_height: int, preserve_aspect_ratio=True):
+        # img_width = len(img[0])
+        # img_height = len(img)
         canvas_width = canvas.winfo_width()
         canvas_height = canvas.winfo_height()
         if preserve_aspect_ratio:
@@ -587,7 +613,7 @@ class FishMesh:
         img_view.drawn_lines = []
         x0 = img_view.x_padding
         y0 = img_view.y_padding
-        point_arr = np.stack([np.array([(p.x * img_view.resized_width) + x0, (p.y * img_view.resized_height) + y0 ]) for p in img_view.points])
+        point_arr = np.stack([np.array([(p.x * img_view.resized_width) + x0, (p.y * img_view.resized_height) + y0]) for p in img_view.points])
         # order to get top_left, top_right, bottom_right, bottom_left:
         ordered_point_arr = _reorder_corner_points(point_arr, "drawing_bounding_box")
         ps = np.reshape(ordered_point_arr, (4,2))
@@ -1120,7 +1146,7 @@ class FishMesh:
     def warp_image(self):
         corners_ndarray = self.points_to_ndarray(self.left_view.points)
         self.warped_image = warp_image(self.img, corners_ndarray, self.settings.measure_box_margin_ratio)
-        self.warp_activated = True
+        # self.warp_activated = True
 
     def points_to_ndarray(self, points: List[Point]):
         img_width = self.img.shape[1]
