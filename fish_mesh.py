@@ -307,14 +307,21 @@ class FishMesh:
             self.settings.point_size_relative_to_monitor_width * screen_width
         )
 
-    def get_default_filename(self) -> str:
-        # return datetime.utcnow().strftime("%Y-%m-%d--%H-%M-%S--UTC")
-        return datetime.utcnow().strftime("%Y-%m-%d--%H-%M--UTC")
+    def get_default_filename(self, exif_datetime: Optional[str] = None) -> str:
+        # TODO: is the exif_datetime timezone aware? or always GMT? how do I handle this?????
+        exif_datetime_format = "%Y:%m:%d %H:%M:%S"    # TODO: what is default exif datetime format??? ------------------
+        filename_datetime_format = "%Y-%m-%d--%H-%M--UTC"
+        if exif_datetime:  # if not None and not empty string
+            return datetime.strptime(exif_datetime, exif_datetime_format).strftime(filename_datetime_format)
+        else:
+            return datetime.utcnow().strftime(filename_datetime_format)
 
     def choose_save_file(self) -> Optional[str]:
+        exif_info: Dict = get_image_exif_info(self.selected_input_file)
+        default_file_name = self.get_default_filename(exif_info["image_datetime"])
         file_handle = filedialog.asksaveasfile(
             initialdir=Path.cwd().__str__(),
-            initialfile=self.get_default_filename(),
+            initialfile=default_file_name,
             title="Select save filename and location"
         )
         if file_handle is not None:
@@ -1206,6 +1213,7 @@ def _reorder_corner_points(corner_points, reorder_for="warp"):
     """
     reorder_for: "warp" | "drawing_bounding_box"
     """
+    # TODO: try to find a better way of reordering points
     corner_points = corner_points.reshape((4, 2))
     reordered_points = np.zeros((4, 1, 2), np.int32)
 
@@ -1227,8 +1235,11 @@ def _reorder_corner_points(corner_points, reorder_for="warp"):
         raise ValueError("Unknown reorder_for. Allowed values: 'warp' or 'drawing_bounding_box'")
     return reordered_points
 
+# TODO: create function to extract aspect ratio from the bounding box and try to use this in
+#       order to get the correct aspect ratio when drawing the transformed image in "right_view"
 
-def get_image_exif_info(path: str):
+
+def get_image_exif_info(path: str) -> Dict:
     extracted_info = {
         "image_datetime": "",
         "image_gps_latitude": "",
