@@ -1,20 +1,18 @@
 #!/usr/bin/env python
-from sys import exit
 from datetime import datetime
-from time import sleep
 from typing import List, Optional, Dict, Tuple
 from tkinter import *
-from tkinter import filedialog, colorchooser, messagebox
+from tkinter import filedialog, messagebox
 import tkinter as tk
 from pathlib import Path
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import numpy as np
 from functools import partial
 from copy import deepcopy
 
 from exif import Image as ExifImage
 import cv2.cv2 as cv2
-from PIL import ImageTk, Image, ImageColor
+from PIL import ImageTk, Image
 from pandas import DataFrame
 import dacite
 
@@ -171,16 +169,6 @@ class FishMesh:
         self.left_view.canvas.bind("<Button-1>", partial(self.left_click_callback, self.left_view, False, "image"))
         self.left_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.left_view, "image"))
         self.left_view.canvas.bind("<ButtonRelease-1>", partial(self.release_callback, self.left_view, "image"))
-
-        # # ZOOM (DOESN'T WORK! Might also be platform dependent (MouseWheel on windows, 4,5 else)):
-        # self.zoom_scale = 1
-        # self.zoom_pos_x = None
-        # self.zoom_pos_y = None
-        # # self.left_view.canvas.bind("<MouseWheel>", partial(self.zoom, self.left_view))
-        # self.left_view.canvas.bind("<Button-4>", partial(self.zoom, self.left_view, 1))
-        # self.left_view.canvas.bind("<Button-5>", partial(self.zoom, self.left_view, -1))
-        # self.left_view.canvas.bind('<ButtonPress-2>', lambda event: self.left_view.canvas.scan_mark(event.x, event.y))
-        # self.left_view.canvas.bind("<B2-Motion>", lambda event: self.left_view.canvas.scan_dragto(event.x, event.y, gain=1))
 
         self.right_view.canvas.bind("<Button-1>", partial(self.left_click_callback, self.right_view, True, "box"))
         self.right_view.canvas.bind("<B1-Motion>", partial(self.drag_callback, self.right_view, "box"))
@@ -391,7 +379,6 @@ class FishMesh:
         # The position is equal to the "padding" (on one side) required to preserve aspect ratio
         img_view.x_padding = x
         img_view.y_padding = y
-        # self.canvas.configure(photo_img, height=photo_img.height(), width=photo_img.width())
         img_view.canvas.itemconfig(img_view.canvas_img, image=img_view.resized_img)
         img_view.canvas.image = img_view.resized_img
         img_view.canvas.configure(bg="black")
@@ -406,9 +393,6 @@ class FishMesh:
 
         self.draw_image(self.left_view)
         self.draw_bounding_box(self.left_view)
-        # # ZOOM (DOESN'T WORK)
-        # if self.zoom_pos_x is not None and self.zoom_pos_y is not None:
-        #     self.left_view.canvas.scale(ALL, self.zoom_pos_x, self.zoom_pos_y, self.zoom_scale, self.zoom_scale)
 
         if self.right_view.img is not None:
             self.draw_image(self.right_view)
@@ -495,57 +479,6 @@ class FishMesh:
             )
             self.toggle_mini_window_button.configure(text="Hide")
 
-    # def rotate_points(self, direction: str):
-    #     """
-    #     This doesn't work.
-    #     Things that I need to consider:
-    #     * when rotating paddings change, since the view is rectangular, it can lead to a smaller or greater padding
-    #       in the new direction. (maybe I need both paddings before and after to do this right)
-    #     * I feel like there should be a way to just swap coordinates as long as I get the new padding
-    #     * I have the canbas width and height and resized image width and height, so I got everything I need
-    #
-    #     ooo PROBLEM!, image might be resized during rotation,... then all points must be scaled differently when scaling back
-    #     """
-    #     # xs = [p.x * self.left_view.resized_width + self.left_view.x_padding for p in self.left_view.points]
-    #     # ys = [p.y * self.left_view.resized_height + self.left_view.y_padding for p in self.left_view.points]
-    #     # center_x = np.sum(xs) / len(ys)
-    #     # center_y = np.sum(ys) / len(ys)
-    #     # for x, y, p in zip(xs, ys, self.left_view.points):
-    #     #     # translate point to origin:
-    #     #     tx, ty = x - center_x, y - center_y
-    #     #     # rotate:
-    #     #     if direction == "clockwise":
-    #     #         rtx, rty = -ty, tx
-    #     #     elif direction == "anticlockwise":
-    #     #         rtx, rty = ty, -tx
-    #     #     else:
-    #     #         raise ValueError("Unknown 'direction', expected 'clockwise' or 'anticlockwise'")
-    #     #     # translate back
-    #     #     rx, ry = rtx + center_x, rty + center_y
-    #     #     # Calculate relative points:
-    #     #     p.x = (rx - self.left_view.x_padding) / self.left_view.resized_width
-    #     #     p.y = (ry - self.left_view.y_padding) / self.left_view.resized_height
-    #
-    #     new_padding_x = self.left_view.resized_height - self.left_view.canvas.winfo_width()  # ooo, image might be resized during rotation,... then all points must be scaled differently when scaling back
-    #     for p in self.left_view.points:
-    #         old_x_px = p.x * self.left_view.resized_width + self.left_view.x_padding
-    #         old_y_px = p.y * self.left_view.resized_height  + self.left_view.y_padding
-    #         old_view_height = 2 * self.left_view.y_padding + self.left_view.resized_height
-    #         new_x_px = old_view_height - old_y_px
-    #         new_y_px = old_x_px
-    #         p.x = (new_x_px - self.left_view.x_padding) / self.left_view.resized_width
-    #         p.y = (new_y_px - self.left_view.y_padding) / self.left_view.resized_height
-    #
-    # def rotate_points_anticlockwise(self):
-    #     for p in self.left_view.points:
-    #         old_x_px = p.x * self.left_view.resized_width + self.left_view.x_padding
-    #         old_y_px = p.y * self.left_view.resized_height  + self.left_view.y_padding
-    #         old_view_width = 2 * self.left_view.x_padding + self.left_view.resized_width
-    #         new_x_px = old_y_px
-    #         new_y_px = old_view_width - old_x_px
-    #         p.x = (new_x_px - self.left_view.x_padding) / self.left_view.resized_width
-    #         p.y = (new_y_px - self.left_view.y_padding) / self.left_view.resized_height
-    #
     def run(self):
         self.window.mainloop()
 
@@ -897,7 +830,8 @@ class FishMesh:
         )
         return corrected_font_size
 
-    def get_font_scale_correction_by_font_size_diff(self, font_size: int, cv2_font=cv2.FONT_HERSHEY_DUPLEX):
+    @staticmethod
+    def get_font_scale_correction_by_font_size_diff(font_size: int, cv2_font=cv2.FONT_HERSHEY_DUPLEX):
         """
         Get correction for the size of a font relative to the
         size of the cv2 font with fontScale=1, thickness=1
@@ -905,13 +839,8 @@ class FishMesh:
         cv2_text_height = cv2.getTextSize(text="A", fontFace=cv2_font, fontScale=font_size, thickness=font_size)[0][1]
         return font_size / cv2_text_height
 
-    # def tk_color_to_rgb(self, color_name: str):
-    #     rgb = self.window.winfo_rgb(color_name)
-    #     r, g, b = [x >> 8 for x in rgb]
-    #     hex = '#{:02x}{:02x}{:02x}'.format(r, g, b)
-    #     return ImageColor.getcolor(hex, "RGB")
-
-    def hex_color_to_rgb(self, hex: str) -> Tuple[int, int, int]:
+    @staticmethod
+    def hex_color_to_rgb(hex: str) -> Tuple[int, int, int]:
         _hex = hex.lstrip("#")
         r = int(_hex[0:2], 16)
         g = int(_hex[2:4], 16)
@@ -1110,16 +1039,6 @@ class FishMesh:
         else:
             raise ValueError("param bound_to must be set to 'image' or 'box'.")
         return x, y
-
-    # def zoom(self, view: ImageView, scale_sign, event):
-    #     x = view.canvas.canvasx(event.x)
-    #     y = view.canvas.canvasy(event.y)
-    #     # factor = 1.05 #** event.delta
-    #     # view.canvas.scale(ALL, x, y, factor, factor)
-    #     self.zoom_scale += scale_sign * 0.05
-    #     self.zoom_pos_x = x
-    #     self.zoom_pos_y = y
-    #     self.draw()
 
     def warp_image(self):
         corners_ndarray = self.points_to_ndarray(self.left_view.points)
