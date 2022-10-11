@@ -144,11 +144,11 @@ jobs:
         python -m pip install -r .\requirements.txt
         pyinstaller fish_mesh.py --name fish-mesh.exe --onefile --hidden-import='PIL._tkinter_finder' --windowed
 #        move .\dist\fish-mesh.exe \.
-        Move-Item -Path .\dist\fish-mesh.exe -Destination \.
-        Get-ChildItem
+        powershell Move-Item -Path .\dist\fish-mesh.exe -Destination \.
+        powershell Get-ChildItem
     - name: zip win artifact
       run: |
-        Get-ChildItem
+        powershell Get-ChildItem
         powershell Compress-Archive .\fish-mesh.exe fish-mesh-python3-9-windows2019.zip
     - name: upload windows artifact
       uses: actions/upload-artifact@v3
