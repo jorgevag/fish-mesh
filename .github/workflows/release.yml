@@ -142,7 +142,7 @@ jobs:
       run: |
         . .\venv\Scripts\activate
         python -m pip install -r .\requirements.txt
-        pyinstaller fish_mesh.py --name fish-mesh.exe --onefile --hidden-import='PIL._tkinter_finder' --windowed -i fish-mesh.ico
+        pyinstaller fish_mesh.py --name fish-mesh.exe --onefile --hidden-import='PIL._tkinter_finder' --hidden-import='jinja2' --hidden-import='pkg_resources.py2_warn' --hidden-import='pkg_resources.markers' --windowed -i fish-mesh.ico
         powershell Get-ChildItem -Path .\dist
         powershell Get-ChildItem
         powershell Move-Item -Path .\dist\fish-mesh.exe -Destination .
