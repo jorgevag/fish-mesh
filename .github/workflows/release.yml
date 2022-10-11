@@ -142,10 +142,10 @@ jobs:
       run: |
         . .\venv\Scripts\activate
         python -m pip install -r .\requirements.txt
-        pyinstaller fish_mesh.py --name fish-mesh.exe --onefile --hidden-import='PIL._tkinter_finder' --windowed
+        pyinstaller fish_mesh.py --name fish-mesh.exe --onefile --hidden-import='PIL._tkinter_finder' --windowed -i fish-mesh.ico
         powershell Get-ChildItem -Path .\dist
-        powershell Get-ChildItem -Path .\dist -Recurse -Depth 3
-        powershell Move-Item -Path .\dist\fish-mesh.exe -Destination \.
+        powershell Get-ChildItem
+        powershell Move-Item -Path .\dist\fish-mesh.exe -Destination .
         powershell Get-ChildItem
     - name: zip win artifact
       run: |
