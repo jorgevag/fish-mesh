@@ -340,46 +340,20 @@ class FishMesh:
 
     def resize_views(self):
         if self.left_view.img is not None:
-            img_width = len(self.img[0])
-            img_height = len(self.img)
-            img, w, h = self.resize_image(self.left_view.img, self.left_view.canvas, img_width, img_height)
+            img, w, h = self.resize_image(self.left_view.img, self.left_view.canvas)
             self.left_view.resized_img = img
             self.left_view.resized_width = w
             self.left_view.resized_height = h
 
         if self.right_view.img is not None:
-
-            img_width = len(self.img[0])
-            img_height = len(self.img)
-            # get aspect ratio from bounding box (to estimate aspect ratio of warped image)
-            point_arr = np.stack(
-                [np.array([p.x * img_width, p.y * img_height]) for p in self.left_view.points]
-            )
-            # order to get top_left, top_right, bottom_right, bottom_left:
-            ordered_point_arr = _reorder_corner_points(point_arr, "drawing_bounding_box")
-            ps = np.reshape(ordered_point_arr, (4, 2))
-            left_height = np.sqrt((ps[0, 0] - ps[3, 0])**2 + (ps[0, 1] - ps[3, 1])**2)
-            right_height = np.sqrt((ps[1, 0] - ps[2, 0])**2 + (ps[1, 1] - ps[2, 1])**2)
-            top_width = np.sqrt((ps[0, 0] - ps[1, 0])**2 + (ps[0, 1] - ps[1, 1])**2)
-            bottom_width = np.sqrt((ps[2, 0] - ps[3, 0])**2 + (ps[2, 1] - ps[3, 1])**2)
-
-            warped_height = int(np.mean([left_height, right_height]))
-            warped_width = int(np.mean([top_width, bottom_width]))
-
-            if warped_height > 0 and warped_width > 0:
-                _width = warped_width
-                _height = warped_height
-            else:
-                _width = img_width
-                _height = img_height
-            img, w, h = self.resize_image(self.right_view.img, self.right_view.canvas, _width, _height)
+            img, w, h = self.resize_image(self.right_view.img, self.right_view.canvas)
             self.right_view.resized_img = img
             self.right_view.resized_width = w
             self.right_view.resized_height = h
 
-    def resize_image(self, img, canvas: tk.Canvas, img_width: int, img_height: int, preserve_aspect_ratio=True):
-        # img_width = len(img[0])
-        # img_height = len(img)
+    def resize_image(self, img, canvas: tk.Canvas, preserve_aspect_ratio=True):
+        img_width = len(img[0])
+        img_height = len(img)
         canvas_width = canvas.winfo_width()
         canvas_height = canvas.winfo_height()
         if preserve_aspect_ratio:
@@ -615,7 +589,7 @@ class FishMesh:
         y0 = img_view.y_padding
         point_arr = np.stack([np.array([(p.x * img_view.resized_width) + x0, (p.y * img_view.resized_height) + y0]) for p in img_view.points])
         # order to get top_left, top_right, bottom_right, bottom_left:
-        ordered_point_arr = _reorder_corner_points(point_arr, "drawing_bounding_box")
+        ordered_point_arr = _reorder_corner_points(point_arr, "clockwise")
         ps = np.reshape(ordered_point_arr, (4,2))
         img_view.drawn_lines.append(img_view.canvas.create_line(ps[0,0], ps[0,1], ps[1,0], ps[1,1], fill=col))
         img_view.drawn_lines.append(img_view.canvas.create_line(ps[1,0], ps[1,1], ps[2,0], ps[2,1], fill=col))
@@ -670,6 +644,8 @@ class FishMesh:
         Generate a mapping from ruler_id to points,
         using the point's ruler_id field.
         """
+        if img_view.points is None:
+            return {}
         rulers: Dict[int, List[Point]] = {}
         for p in img_view.points:
             if p.ruler_id not in rulers:
@@ -783,8 +759,8 @@ class FishMesh:
                 y = label_point.y * self.right_view.resized_height + self.right_view.y_padding
             elif coordinates_type == "full_image":
                 # For drawing rulers and labels when saving the image.
-                img_width = self.img.shape[1]
-                img_height = self.img.shape[0]
+                img_width = self.warped_image.shape[1]
+                img_height = self.warped_image.shape[0]
                 x = label_point.x * img_width
                 y = label_point.y * img_height
             else:
@@ -845,7 +821,8 @@ class FishMesh:
 
     def create_save_image(self):
         """
-        when saving the image, draw rulers and ruler labels on the original image to keep original resolution.
+        when saving the image, draw rulers and ruler labels
+        on the original image to keep original resolution.
         """
         ruler_point_map = self.create_ruler_point_mapping(self.right_view)
         label_positions = self.find_ruler_label_position(ruler_point_map, coordinates_type="full_image")
@@ -857,10 +834,11 @@ class FishMesh:
         scaled_font_size = self.get_original_image_font_size(
             self.settings.font_size
         )
+        color = self.settings.draw_color
+        rgb = self.hex_color_to_rgb(color)
         for i, (ruler_id, points) in enumerate(ruler_point_map.items()):
             # draw lines
             # color = self.tk_color_to_rgb(points[0].color)
-            color = self.settings.draw_color
             p0 = (
                 int(points[0].x * img_width),
                 int(points[0].y * img_height)
@@ -869,7 +847,7 @@ class FishMesh:
                  int(points[1].x * img_width),
                  int(points[1].y * img_height)
             )
-            rgb = self.hex_color_to_rgb(color)
+            # rgb = self.hex_color_to_rgb(color)
             cv2.line(save_image, p0, p1, color=rgb, thickness=1, lineType=cv2.LINE_4)
 
             lbl_x, lbl_y = label_positions[ruler_id]
@@ -881,8 +859,8 @@ class FishMesh:
                 text=f"{output_ruler_id}: {value:.1f} cm",
                 org=(int(lbl_x), int(lbl_y)),
                 fontFace=cv2.FONT_HERSHEY_DUPLEX,  # cv2.FONT_HERSHEY_SIMPLEX,
-                fontScale=scaled_font_size,
-                thickness=int(scaled_font_size),
+                fontScale=int(np.ceil(scaled_font_size)),
+                thickness=int(np.ceil(scaled_font_size)),
                 color=rgb,
             )
 
@@ -1156,8 +1134,9 @@ class FishMesh:
     def save_callback(self):
         if self.warped_image is None:
             return
-        save_path = Path(self.choose_save_file())
-        if save_path is not None:
+        selected_save_path = self.choose_save_file()
+        if selected_save_path is not None:
+            save_path = Path(selected_save_path)
             self.save_image(path=save_path.parent, save_id=save_path.stem)
             self.save_data(path=save_path.parent, save_id=save_path.stem)
 
@@ -1218,51 +1197,79 @@ def create_data_file_name(save_id: str) -> str:
 
 
 def warp_image(img, corner_points, rel_margin: float):
-    corner_points = _reorder_corner_points(corner_points, "warp")
+    corner_points = _reorder_corner_points(corner_points, "anti-clockwise")  # getPerspective expects anti-clockwise
     img_width = img.shape[1]
     img_height = img.shape[0]
     old_corner_points = np.float32(corner_points)
-    # new_corner_points = np.float32([[0, 0], [img_width, 0],
-    #                                 [0, img_height], [img_width, img_height]])
+    # new_corner_points = np.float32([[0, 0],
+    #                                 [img_height, 0],
+    #                                 [img_width, img_height],
+    #                                 [0, img_width]])
     new_corner_points = np.float32([
         [rel_margin * img_width, rel_margin * img_height],
-        [(1 - rel_margin) * img_width, rel_margin * img_height],
         [rel_margin * img_width, (1 - rel_margin) * img_height],
-        [(1 - rel_margin) * img_width, (1 - rel_margin) * img_height]])
+        [(1 - rel_margin) * img_width, (1 - rel_margin) * img_height],
+        [(1 - rel_margin) * img_width, rel_margin * img_height]])
     matrix = cv2.getPerspectiveTransform(old_corner_points, new_corner_points)
     img_warped = cv2.warpPerspective(img, matrix, (img_width, img_height))
-    return img_warped
+    # cv2 warpPerspective seems to output the same dimensions as the input image,
+    # potentially skewing the image if the drawn corners are of a different aspect
+    # ratio than the original image.
+    # --> Add an additional transformation according to the drawn bounding box
+    #     aspect ratio in order to prevent skew in the original image
+    # TODO: see if there is a better way to do this (input params of warpPerspective?)
+    p1 = corner_points[0, 0, :]  # (points ordered anti-clockwise, starting from upper left)
+    p2 = corner_points[1, 0, :]
+    p3 = corner_points[2, 0, :]
+    p4 = corner_points[3, 0, :]
+    left_height = np.sqrt((p1[0] - p2[0])**2 + (p1[1] - p2[1])**2)
+    right_height = np.sqrt((p3[0] - p4[0])**2 + (p3[1] - p4[1])**2)
+    top_width = np.sqrt((p1[0] - p4[0])**2 + (p1[1] - p4[1])**2)
+    bottom_width = np.sqrt((p2[0] - p3[0])**2 + (p2[1] - p3[1])**2)
+
+    box_height = int(np.mean([left_height, right_height]))
+    box_width = int(np.mean([top_width, bottom_width]))
+    box_aspect_ratio = box_width / box_height
+    if box_aspect_ratio >= 1:
+        new_img_width = img_width
+        new_img_height = max(int(img_width / box_aspect_ratio), 1)  # avoid height=0
+    else:
+        new_img_width = max(int(box_aspect_ratio * img_height), 1)
+        new_img_height = img_height
+    img_warped_unskewed = cv2.resize(img_warped, (new_img_width, new_img_height), interpolation=cv2.INTER_AREA)
+    return img_warped_unskewed
 
 
 # reorder (for correct input to warping function
-def _reorder_corner_points(corner_points, reorder_for="warp"):
+def _reorder_corner_points(corner_points, order="anti-clockwise"):
     """
-    reorder_for: "warp" | "drawing_bounding_box"
+    Identify point position and order them accorading to the specified
+    order starting from the upper left corner
+    order: "anti-clockwise" | "clockwise"
     """
-    # TODO: try to find a better way of reordering points
+    # TODO: try to find a more robust way of categorising the corners
+    #       motivation: the box isn't drawn for oddly positioned points
+    #                   breaking with the non-robust method below
     corner_points = corner_points.reshape((4, 2))
     reordered_points = np.zeros((4, 1, 2), np.int32)
 
     pair_sum = corner_points.sum(1)
-    pair_diff = np.diff(corner_points, axis=1)
-    if reorder_for == "warp":
+    pair_diff = -np.diff(corner_points, axis=1)
+    if order == "anti-clockwise":
         reordered_points[0] = corner_points[np.argmin(pair_sum)]
-        reordered_points[3] = corner_points[np.argmax(pair_sum)]
+        reordered_points[2] = corner_points[np.argmax(pair_sum)]
 
         reordered_points[1] = corner_points[np.argmin(pair_diff)]
-        reordered_points[2] = corner_points[np.argmax(pair_diff)]
-    elif reorder_for == "drawing_bounding_box":
+        reordered_points[3] = corner_points[np.argmax(pair_diff)]
+    elif order == "clockwise":
         reordered_points[0] = corner_points[np.argmin(pair_sum)]  # x+y smallest (upper left)
         reordered_points[2] = corner_points[np.argmax(pair_sum)]  # x+y largest (lower right)
 
         reordered_points[3] = corner_points[np.argmin(pair_diff)]  # x-y smallest (lower left)
         reordered_points[1] = corner_points[np.argmax(pair_diff)]  # x-y larger (upper right)
     else:
-        raise ValueError("Unknown reorder_for. Allowed values: 'warp' or 'drawing_bounding_box'")
+        raise ValueError(f"Unknown order={repr(order)}. Allowed values: 'clockwise' or 'anti-clockwise' (default)")
     return reordered_points
-
-# TODO: create function to extract aspect ratio from the bounding box and try to use this in
-#       order to get the correct aspect ratio when drawing the transformed image in "right_view"
 
 
 def get_image_exif_info(path: str) -> Dict:
