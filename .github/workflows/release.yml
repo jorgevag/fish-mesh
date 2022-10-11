@@ -126,12 +126,12 @@ jobs:
   build-windows:
     runs-on: windows-2019
     steps:
+    - uses: actions/checkout@v1
     - uses: actions/setup-python@v4
       with:
         python-version: "3.9"
     - name: install requirements
       run: |
-#       check where python executable is (TODO: remove) printing path:
         python -c "import os, sys; print(os.path.dirname(sys.executable))"
         python3 -m venv venv
         . .\venv\Scripts\activate
