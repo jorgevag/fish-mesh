@@ -1255,20 +1255,23 @@ def _reorder_corner_points(corner_points, order="anti-clockwise"):
 
     pair_sum = corner_points.sum(1)
     pair_diff = -np.diff(corner_points, axis=1)
+
+    # sort points based on angle:
+    # (starting from upper_left to get correct orientation when warping image)
+    upper_left = corner_points[np.argmin(pair_sum)]
+    upper_left_angle = 0 if order == "clockwise" else 2 * np.pi
+    angles = [
+        np.arctan2((p[1] - upper_left[1]), (p[0] - upper_left[0])) + np.pi
+        if np.any(p != upper_left) else upper_left_angle
+        for p in corner_points
+    ]
     if order == "anti-clockwise":
-        reordered_points[0] = corner_points[np.argmin(pair_sum)]
-        reordered_points[2] = corner_points[np.argmax(pair_sum)]
-
-        reordered_points[1] = corner_points[np.argmin(pair_diff)]
-        reordered_points[3] = corner_points[np.argmax(pair_diff)]
+        reverse = True
     elif order == "clockwise":
-        reordered_points[0] = corner_points[np.argmin(pair_sum)]  # x+y smallest (upper left)
-        reordered_points[2] = corner_points[np.argmax(pair_sum)]  # x+y largest (lower right)
-
-        reordered_points[3] = corner_points[np.argmin(pair_diff)]  # x-y smallest (lower left)
-        reordered_points[1] = corner_points[np.argmax(pair_diff)]  # x-y larger (upper right)
+        reverse = False
     else:
         raise ValueError(f"Unknown order={repr(order)}. Allowed values: 'clockwise' or 'anti-clockwise' (default)")
+    reordered_points = np.stack([[p] for (_, p) in sorted(zip(angles, corner_points), key=lambda x: x[0], reverse=reverse)])
     return reordered_points
 
 
