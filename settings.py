@@ -18,7 +18,7 @@ class Settings:
     measure_box_height: float = 29.6
     measure_box_margin_ratio: float = 0.1  # to allow showing the entire head of fish placed along the edge
     font_size: int = 16
-    point_size_relative_to_monitor_width: float = 0.0001  # 0.0025
+    point_size_pixels: int = 1
     show_mini_window_on_start: bool = True
     draw_color: str = "#ffff00"  # yellow
 
@@ -29,10 +29,10 @@ class Settings:
             raise SettingsError("'Measure box height' must be larger than 0")
         if not self.measure_box_height > 0:
             raise SettingsError("'Measure box height' must be larger than 0")
-        if not self.point_size_relative_to_monitor_width > 0:
-            raise SettingsError("'Point size relative to monitor width' must be larger than 0")
+        if not self.point_size_pixels > 0:
+            raise SettingsError("'Point size in pixels' must be larger than 0")
         if not self.measure_box_margin_ratio > 0:
-            raise SettingsError("'Point size relative to monitor width' must be larger than 0")
+            raise SettingsError("'Measure box margin ratio' must be larger than 0")
 
     @staticmethod
     def from_dict(d: Dict):
@@ -68,8 +68,9 @@ SETTING_DESCRIPTIONS = dict(
     font_size=(
         "The font size of the shown length measurements"
     ),
-    point_size_relative_to_monitor_width=(
-        "The size of the points given as a ratio of the monitor screen."
+    point_size_pixels=(
+        "The size of the points (in pixels) used for bounding box corners and"
+        " drawn rulers."
     ),
     draw_color=(
         "The color of everything drawn within the program."

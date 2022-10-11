@@ -81,10 +81,7 @@ class FishMesh:
         # self.window.iconbitmap(default="fish-mesh.ico")  # icon not compatible across OSs (TODO)
         # https://stackoverflow.com/questions/20860325/python-3-tkinter-iconbitmap-error-in-ubuntu
 
-        screen_width = self.window.winfo_screenwidth()
-        self.point_radii = int(
-            self.settings.point_size_relative_to_monitor_width * screen_width
-        )
+        self.point_radii = max(int(self.settings.point_size_pixels / 2), 1)
 
         self.top_menu = tk.Frame(self.window, background="white")
         self.top_menu.pack(fill="x")#, expand=True)
@@ -291,9 +288,7 @@ class FishMesh:
     def update_settings_related_members(self):
         # Make point sizes a percentage of the monitor width
         screen_width = self.window.winfo_screenwidth()
-        self.point_radii = int(
-            self.settings.point_size_relative_to_monitor_width * screen_width
-        )
+        self.point_radii = max(int(self.settings.point_size_pixels / 2), 1)
 
     def get_default_filename(self, exif_datetime: Optional[str] = None) -> str:
         # TODO: is the exif_datetime timezone aware? or always GMT? how do I handle this?????

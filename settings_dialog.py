@@ -140,10 +140,12 @@ class SettingsDialog(tk.simpledialog.Dialog):
         self.fields["draw_color"].entry.configure(text=" ", background=hex)
 
     def toggle_show_mini_window(self):
-        self.show_mini_window = not(self.fields["show_mini_window_on_start"].value)
+        new_value = not self.fields["show_mini_window_on_start"].value
+        self.show_mini_window = new_value
         self.fields["show_mini_window_on_start"].entry.configure(
-            text=("Yes" if self.show_mini_window else "No")
+            text=("Yes" if new_value else "No")
         )
+        self.fields["show_mini_window_on_start"].value = new_value
 
     def read_entries(self):
         for field in self.fields:
