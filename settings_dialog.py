@@ -66,7 +66,7 @@ class SettingsDialog(tk.simpledialog.Dialog):
                 self.fields[field].entry = tk.Button(
                     frame,
                     background=self.fields[field].value,
-                    text="",
+                    text=" ",
                     command=self.choose_color,
                 )
                 self.fields[field].entry.grid(row=row, column=1)
@@ -137,7 +137,7 @@ class SettingsDialog(tk.simpledialog.Dialog):
         rgb, hex = colorchooser.askcolor(title="Choose color")
         if hex is not None:
             self.selected_draw_color = hex
-        self.fields["draw_color"].entry.configure(text="", background=hex)
+        self.fields["draw_color"].entry.configure(text=" ", background=hex)
 
     def toggle_show_mini_window(self):
         self.show_mini_window = not(self.fields["show_mini_window_on_start"].value)
