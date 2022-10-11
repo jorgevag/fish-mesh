@@ -133,13 +133,15 @@ jobs:
     - name: install requirements
       run: |
         python -c "import os, sys; print(os.path.dirname(sys.executable))"
-        python3 -m venv venv
+        python -m venv venv
         . .\venv\Scripts\activate
-        pip install --upgrade pip
-        pip install --no-cache-dir -r ./requirements.txt
+        python -m ensurepip
+        python -m pip install --upgrade pip
+        python -m pip install --no-cache-dir -r ./requirements.txt
     - name: build executable with pyinstaller - windows
       run: |
-        pip install -r .\requirements.txt
+        . .\venv\Scripts\activate
+        python -m pip install -r .\requirements.txt
         pyinstaller fish_mesh.py^
           --name fish-mesh.exe^
           --onefile^
