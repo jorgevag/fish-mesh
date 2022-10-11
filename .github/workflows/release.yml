@@ -143,7 +143,6 @@ jobs:
         . .\venv\Scripts\activate
         python -m pip install -r .\requirements.txt
         pyinstaller fish_mesh.py --name fish-mesh.exe --onefile --hidden-import='PIL._tkinter_finder' --windowed
-#        move .\dist\fish-mesh.exe \.
         powershell Move-Item -Path .\dist\fish-mesh.exe -Destination \.
         powershell Get-ChildItem
     - name: zip win artifact
