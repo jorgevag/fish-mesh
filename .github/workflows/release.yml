@@ -142,11 +142,7 @@ jobs:
       run: |
         . .\venv\Scripts\activate
         python -m pip install -r .\requirements.txt
-        pyinstaller fish_mesh.py^
-          --name fish-mesh.exe^
-          --onefile^
-          --hidden-import='PIL._tkinter_finder'^
-          --windowed  :: avoid console on windows systems
+        pyinstaller fish_mesh.py --name fish-mesh.exe --onefile --hidden-import='PIL._tkinter_finder' --windowed
         move .\dist\fish-mesh.exe \.
     - name: zip win artifact
       run: |
