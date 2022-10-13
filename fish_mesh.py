@@ -10,7 +10,7 @@ import numpy as np
 from functools import partial
 from copy import deepcopy
 
-from exif import Image as ExifImage
+import exif
 import cv2.cv2 as cv2
 from PIL import ImageTk, Image
 from pandas import DataFrame
@@ -291,9 +291,8 @@ class FishMesh:
         self.point_radii = max(int(self.settings.point_size / 2), 1)
 
     def get_default_filename(self, exif_datetime: Optional[str] = None) -> str:
-        # TODO: is the exif_datetime timezone aware? or always GMT? how do I handle this?????
-        exif_datetime_format = "%Y:%m:%d %H:%M:%S"    # TODO: what is default exif datetime format??? ------------------
-        filename_datetime_format = "%Y-%m-%d--%H-%M--UTC"
+        exif_datetime_format = "%Y:%m:%d %H:%M:%S"  # TODO: verify if there is variation in the exif datetime format
+        filename_datetime_format = "%Y-%m-%d--%H-%M"
         if exif_datetime:  # if not None and not empty string
             return datetime.strptime(exif_datetime, exif_datetime_format).strftime(filename_datetime_format)
         else:
@@ -1196,7 +1195,7 @@ def get_image_exif_info(path: str) -> Dict:
         "image_gps_longitude": ""
     }
     with open(path, "rb") as f:
-        exif_img = ExifImage(f)
+        exif_img = exif.Image(f)
         if exif_img.has_exif:
             if hasattr(exif_img, "datetime"):
                 extracted_info["image_datetime"] = exif_img.datetime
