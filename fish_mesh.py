@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import logging
 from datetime import datetime
 from typing import List, Optional, Dict, Tuple
 from tkinter import *
@@ -18,6 +19,12 @@ import dacite
 
 from settings import Settings, SettingsError, DEFAULT_SETTINGS_PATH
 from settings_dialog import SettingsDialog
+
+
+logging.basicConfig(filename='logs.log',
+                    filemode='w',
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -58,18 +65,20 @@ class RelativeComponent:
 
 class FishMesh:
     def __init__(self, settings: Optional[Settings] = None):
+        logger.info("Starting program")
         self.settings: Settings
         if settings is not None:
             self.settings = settings
         elif DEFAULT_SETTINGS_PATH.exists():
             try:
                 self.settings = Settings.from_file(DEFAULT_SETTINGS_PATH)
-            except (dacite.DaciteError, dacite.DaciteFieldError, dacite.UnexpectedDataError):
+            except (dacite.DaciteError, dacite.DaciteFieldError, dacite.UnexpectedDataError) as e:
                 messagebox.showwarning(
                     "Invalid local settings file"
                     "Found fish-mesh-settings.json, but this was not"
                     " correctly formatted and will be ignored."
                 )
+                logger.exception(e)
                 self.settings = Settings()
         else:
             self.settings = Settings()
@@ -232,13 +241,17 @@ class FishMesh:
         if selected_file:
             try:
                 self.img = self.load_image(selected_file)
-            except Exception:
+            except Exception as e:
                 messagebox.showerror(
                     "Image File Error",
                     "Could not load image. Make sure the selected file is an image file."
                 )
+                logger.error(
+                    f"Encountered error while trying to load image from the selected file {repr(selected_file)}:"
+                )
+                logger.exception(e)
             else:
-                # Image successfully loaded
+                logger.info("Successfully loaded image file")
                 self.selected_input_file = selected_file
                 # Clear any potential drawings from a previous image:
                 self.clear_all_drawings()
@@ -259,6 +272,7 @@ class FishMesh:
             #     ("Text files", "*.txt*"),
             # )
         )
+        logger.info(f"Selected file {selected_input_file}")
         return selected_input_file
 
     def clear_all_drawings(self):
@@ -290,11 +304,22 @@ class FishMesh:
         screen_width = self.window.winfo_screenwidth()
         self.point_radii = max(int(self.settings.point_size / 2), 1)
 
-    def get_default_filename(self, exif_datetime: Optional[str] = None) -> str:
+    def get_default_filename(self, exif_datetime_str: Optional[str] = None) -> str:
         exif_datetime_format = "%Y:%m:%d %H:%M:%S"  # TODO: verify if there is variation in the exif datetime format
         filename_datetime_format = "%Y-%m-%d--%H-%M"
-        if exif_datetime:  # if not None and not empty string
-            return datetime.strptime(exif_datetime, exif_datetime_format).strftime(filename_datetime_format)
+        if exif_datetime_str:  # if not None and not empty string
+            try:
+                efix_datetime = datetime.strptime(exif_datetime_str, exif_datetime_format).strftime(filename_datetime_format)
+            except ValueError as e:
+                logger.error(
+                    f"Unable to format exif datetime string {repr(exif_datetime_str)}"
+                    f" to format {exif_datetime_format}. Conversion failed with error:"
+                )
+                logger.exception(e)
+                logger.info("Returning current time as replacement for failed exif datetime extraction.")
+                return datetime.utcnow().strftime(filename_datetime_format)
+            else:
+                return efix_datetime
         else:
             return datetime.utcnow().strftime(filename_datetime_format)
 
@@ -815,7 +840,8 @@ class FishMesh:
         img_relative_font_size = font_size / resized_height  # both are in pixels
 
         # Get the number of pixels this represents on the original image
-        scaled_font_size = img_relative_font_size * len(self.img)
+        # scaled_font_size = img_relative_font_size * len(self.img)
+        scaled_font_size = img_relative_font_size * len(self.warped_image)
 
         # Correct any differences in font size between tkinter and cv2
         corrected_font_size = (
@@ -1047,11 +1073,15 @@ class FishMesh:
     def save_callback(self):
         if self.warped_image is None:
             return
-        selected_save_path = self.choose_save_file()
-        if selected_save_path is not None:
-            save_path = Path(selected_save_path)
-            self.save_image(path=save_path.parent, save_id=save_path.stem)
-            self.save_data(path=save_path.parent, save_id=save_path.stem)
+        try:
+            selected_save_path = self.choose_save_file()
+            if selected_save_path is not None:
+                save_path = Path(selected_save_path)
+                self.save_image(path=save_path.parent, save_id=save_path.stem)
+                self.save_data(path=save_path.parent, save_id=save_path.stem)
+        except Exception as e:
+            logger.error("Exception encountered while trying to save image and data files.")
+            logger.exception(e)
 
     def save_data(self, path: Path, save_id: str):
         img_info = get_image_exif_info(self.selected_input_file)
