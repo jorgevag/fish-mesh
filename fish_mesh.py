@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import logging
+import re
 from datetime import datetime
 from typing import List, Optional, Dict, Tuple
 from tkinter import *
@@ -25,6 +26,10 @@ logging.basicConfig(filename='logs.log',
                     filemode='w',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+class WriteResultFileError(Exception):
+    pass
 
 
 @dataclass
@@ -94,6 +99,7 @@ class FishMesh:
 
         self.top_menu = tk.Frame(self.window, background="white")
         self.top_menu.pack(fill="x")#, expand=True)
+        self.input_folder = Path.cwd().__str__()
         self.input_file_explorer_button = Button(
             self.top_menu,
             bg="white",
@@ -235,10 +241,22 @@ class FishMesh:
             # highlightthickness=0,
             # bd=0
         )
+        self.saved_points: Optional[List[Point]] = None
+        self.output_folder = Path.cwd().__str__()
 
     def select_and_load_file(self):
         selected_file = self.select_file()
         if selected_file:
+            self.input_folder = Path(selected_file).parent
+
+            if self.right_view.points is not None and self.right_view.points != self.saved_points:
+                # TODO: make a configuration to not get warning before opening
+                answered_yes = messagebox.askyesno(
+                    "Load new image?",
+                    "Opening a new image will end the current session and reset measurements."
+                )
+                if not answered_yes:
+                    return
             try:
                 self.img = self.load_image(selected_file)
             except Exception as e:
@@ -265,7 +283,7 @@ class FishMesh:
     def select_file(self):
         """opening file explorer window"""
         selected_input_file = filedialog.askopenfilename(
-            initialdir=Path.cwd().__str__(),
+            initialdir=self.input_folder,
             title="Select a File",
             # filetypes=(
             #     ("all files", "*.*"),
@@ -348,7 +366,7 @@ class FishMesh:
         exif_info: Dict = get_image_exif_info(self.selected_input_file)
         default_file_name = self.get_default_filename(exif_info["image_datetime"])
         file_handle = filedialog.asksaveasfile(
-            initialdir=Path.cwd().__str__(),
+            initialdir=self.output_folder,
             initialfile=default_file_name,
             title="Select save filename and location"
         )
@@ -1091,6 +1109,12 @@ class FishMesh:
         img_height = self.img.shape[0]
         return np.stack([np.array([p.x * img_width, p.y * img_height]) for p in points])
 
+    @staticmethod
+    def valid_filename(filename_stem: str):
+        alphanum_underscore_dash = "^[a-zA-Z0-9_-]+$"
+        matched = re.match(alphanum_underscore_dash, filename_stem)
+        return bool(matched)
+
     def save_callback(self):
         if self.warped_image is None:
             return
@@ -1098,11 +1122,20 @@ class FishMesh:
             selected_save_path = self.choose_save_file()
             if selected_save_path is not None:
                 save_path = Path(selected_save_path)
+                if not self.valid_filename(save_path.stem):
+                    messagebox.showerror(
+                        "Invalid filename",
+                        "Only alphanumeric characters, dashes and underscores are allowed in the filenames"
+                        " (allowed: a-z, A-Z, 0-9, -, _)")
+                    return
+                self.output_folder = save_path.parent
                 self.save_image(path=save_path.parent, save_id=save_path.stem)
                 self.save_data(path=save_path.parent, save_id=save_path.stem)
         except Exception as e:
             logger.error("Exception encountered while trying to save image and data files.")
             logger.exception(e)
+        else:
+            self.saved_points = deepcopy(self.right_view.points)
 
     def save_data(self, path: Path, save_id: str):
         img_info = get_image_exif_info(self.selected_input_file)
@@ -1134,11 +1167,19 @@ class FishMesh:
         # Save excel file with the same name as image filename:
         filename = path / create_data_file_name(save_id)
         df.to_excel(str(filename), index=False, float_format="%.1f")
+        if not filename.exists():
+            raise WriteResultFileError(
+                f"No output excel file produced for {filename}."
+            )
 
     def save_image(self, path: Path, save_id: str):
         save_image = self.create_save_image()
         filename = path / create_save_image_name(save_id)
         cv2.imwrite(filename=str(filename), img=save_image)
+        if not filename.exists():
+            raise WriteResultFileError(
+                f"No output image produced for {filename}."
+            )
 
 
 def clear_drawings(img_view: ImageView):
@@ -1240,20 +1281,44 @@ def _reorder_corner_points(corner_points, order="anti-clockwise"):
 
 
 def get_image_exif_info(path: str) -> Dict:
+    def get_degrees(angles: Tuple[float, float, float]) -> float:
+        return angles[0] + (angles[1] / 60) + (angles[2] / 3600)
+    def format_degrees(angles: Tuple[float, float, float]) -> str:
+        return f"{int(angles[0])}\u00B0{int(angles[1])}'{angles[2]}\""
+    # def get_angles(degrees: float) -> Tuple[float, float, float]:
+    #     a0 = degrees // 1
+    #     r0 = (degrees % 1)
+    #     a1 = r0 * 60 // 1
+    #     r1 = r0 * 60 % 1
+    #     a2 = r1 * 60
+    #     return a0, a1, a2
     extracted_info = {
         "image_datetime": "",
         "image_gps_latitude": "",
-        "image_gps_longitude": ""
+        "image_gps_longitude": "",
+        "image_gps_latitude_text": "",
+        "image_gps_longitude_text": ""
     }
     with open(path, "rb") as f:
         exif_img = exif.Image(f)
         if exif_img.has_exif:
             if hasattr(exif_img, "datetime"):
                 extracted_info["image_datetime"] = exif_img.datetime
-            if hasattr(exif_img, "image_gps_latitude"):
-                extracted_info["gps_latitude"] = exif_img.gps_latitude
+            if hasattr(exif_img, "gps_latitude"):
+                extracted_info["image_gps_latitude"] = get_degrees(exif_img.gps_latitude)
+                extracted_info["image_gps_latitude_text"] = format_degrees(exif_img.gps_latitude)
             if hasattr(exif_img, "gps_longitude"):
-                extracted_info["image_gps_longitude"] = exif_img.gps_longitude
+                extracted_info["image_gps_longitude"] = get_degrees(exif_img.gps_longitude)
+                extracted_info["image_gps_longitude_text"] = format_degrees(exif_img.gps_longitude)
+    # lo = exif_img.gps_latitude
+    # lo_s = format_degrees(lo)
+    # lo_f = get_degrees(lo)
+    # lo_2 = get_angles(lo_f)
+    #
+    # la = exif_img.gps_longitude
+    # la_s = format_degrees(la)
+    # la_f = get_degrees(la)
+    # la_2 = get_angles(la_f)
     return extracted_info
 
 
