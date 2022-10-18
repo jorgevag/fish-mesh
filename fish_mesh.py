@@ -295,14 +295,35 @@ class FishMesh:
         except SettingsError as e:
             messagebox.showerror(f"Incorrect settings", str(e))
         else:
+            old_settings = self.settings
             self.settings = settings
-            self.update_settings_related_members()
-            self.draw()
+            self.update_program_with_new_settings(old_settings)
 
-    def update_settings_related_members(self):
-        # Make point sizes a percentage of the monitor width
-        screen_width = self.window.winfo_screenwidth()
+    def update_program_with_new_settings(self, old_settings: Settings):
         self.point_radii = max(int(self.settings.point_size / 2), 1)
+        # settings might change properties related to the bounding box.
+        # Since ruler points doesn't know about the margin, we need to
+        # rescale all the drawn rulers:
+        if self.img is not None:
+            self.warp_image()
+        if self.right_view.points is not None:
+            old_margin_ratio = old_settings.measure_box_margin_ratio
+            new_margin_ratio = self.settings.measure_box_margin_ratio
+            scaling = (1 - 2 * new_margin_ratio) / ( 1 - 2 * old_margin_ratio)
+            for i, p in enumerate(self.right_view.points):
+                # get coordinates of points relativee to center of image
+                # (in order to scale rulers relative to the center of the image):
+                cpx = p.x - 0.5
+                cpy = p.y - 0.5
+                # scale:
+                scpx = cpx * scaling
+                scpy = cpy * scaling
+                # translate coordinates back to original origin:
+                spx = scpx + 0.5
+                spy = scpy + 0.5
+                self.right_view.points[i].x = spx
+                self.right_view.points[i].y = spy
+        self.draw()
 
     def get_default_filename(self, exif_datetime_str: Optional[str] = None) -> str:
         exif_datetime_format = "%Y:%m:%d %H:%M:%S"  # TODO: verify if there is variation in the exif datetime format
