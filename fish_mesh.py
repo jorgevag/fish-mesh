@@ -71,6 +71,13 @@ class RelativeComponent:
 class FishMesh:
     def __init__(self, settings: Optional[Settings] = None):
         logger.info("Starting program")
+        self.window = tk.Tk()
+        self.window.title('fish-mesh')
+        self.window.config(background="white")
+        self.window.geometry(f"{self.window.winfo_screenwidth()}x{self.window.winfo_screenheight()}")
+        # self.window.iconbitmap(default="fish-mesh.ico")  # icon not compatible across OSs (TODO)
+        # https://stackoverflow.com/questions/20860325/python-3-tkinter-iconbitmap-error-in-ubuntu
+
         self.settings: Settings
         if settings is not None:
             self.settings = settings
@@ -79,23 +86,24 @@ class FishMesh:
                 self.settings = Settings.from_file(DEFAULT_SETTINGS_PATH)
             except (dacite.DaciteError, dacite.DaciteFieldError, dacite.UnexpectedDataError) as e:
                 messagebox.showwarning(
-                    "Invalid local settings file"
-                    "Found fish-mesh-settings.json, but this was not"
-                    " correctly formatted and will be ignored."
+                    "Invalid settings file",
+                    f"Found fish-mesh-settings.json, but this was not"
+                    f" correctly formatted and will be ignored."
+                    f"\n\n"
+                    f"To remove this warning, either"
+                    " overwrite it by going to 'settings' and"
+                    " choosing to save for future sessions"
+                    f" or delete the settings file located"
+                    f" at {DEFAULT_SETTINGS_PATH}"
                 )
                 logger.exception(e)
                 self.settings = Settings()
         else:
             self.settings = Settings()
         # Init tkinter window:
-        self.window = tk.Tk()
-        self.window.title('fish-mesh')
-        self.window.config(background="white")
-        self.window.geometry(f"{self.window.winfo_screenwidth()}x{self.window.winfo_screenheight()}")
-        # self.window.iconbitmap(default="fish-mesh.ico")  # icon not compatible across OSs (TODO)
-        # https://stackoverflow.com/questions/20860325/python-3-tkinter-iconbitmap-error-in-ubuntu
 
         self.point_radii = max(int(self.settings.point_size / 2), 1)
+        self.margin_ratio = self.settings.measure_box_margin_percentage / 100
 
         self.top_menu = tk.Frame(self.window, background="white")
         self.top_menu.pack(fill="x")#, expand=True)
@@ -319,14 +327,15 @@ class FishMesh:
 
     def update_program_with_new_settings(self, old_settings: Settings):
         self.point_radii = max(int(self.settings.point_size / 2), 1)
+        self.margin_ratio = self.settings.measure_box_margin_percentage / 100
         # settings might change properties related to the bounding box.
         # Since ruler points doesn't know about the margin, we need to
         # rescale all the drawn rulers:
         if self.img is not None:
             self.warp_image()
         if self.right_view.points is not None:
-            old_margin_ratio = old_settings.measure_box_margin_ratio
-            new_margin_ratio = self.settings.measure_box_margin_ratio
+            old_margin_ratio = old_settings.measure_box_margin_percentage / 100
+            new_margin_ratio = self.settings.measure_box_margin_percentage / 100
             scaling = (1 - 2 * new_margin_ratio) / ( 1 - 2 * old_margin_ratio)
             for i, p in enumerate(self.right_view.points):
                 # get coordinates of points relativee to center of image
@@ -616,10 +625,10 @@ class FishMesh:
         col = self.settings.draw_color
         x0 = img_view.x_padding
         y0 = img_view.y_padding
-        min_x = self.settings.measure_box_margin_ratio * img_view.resized_width + x0
-        min_y = self.settings.measure_box_margin_ratio * img_view.resized_height + y0
-        max_x = (1 - self.settings.measure_box_margin_ratio) * img_view.resized_width + x0
-        max_y = (1 - self.settings.measure_box_margin_ratio) * img_view.resized_height + y0
+        min_x = self.margin_ratio * img_view.resized_width + x0
+        min_y = self.margin_ratio * img_view.resized_height + y0
+        max_x = (1 - self.margin_ratio) * img_view.resized_width + x0
+        max_y = (1 - self.margin_ratio) * img_view.resized_height + y0
         # draw lines: top_left, top_right, bottom_right, bottom_left:
         self.measure_box_lines = []
         self.measure_box_lines.append(img_view.canvas.create_line(min_x, min_y, min_x, max_y, fill=col))
@@ -773,7 +782,7 @@ class FishMesh:
         return ruler_label_position
 
     def read_rulers(self, ruler_point_map: Dict[int, List[Point]]):
-        img_to_box_scale_ratio = 1 / (1 - 2 * self.settings.measure_box_margin_ratio)
+        img_to_box_scale_ratio = 1 / (1 - 2 * self.margin_ratio)
         ruler_values = {}
         for ruler_id, ruler_points in ruler_point_map.items():
             p1 = ruler_points[0]
@@ -856,10 +865,10 @@ class FishMesh:
             )
 
         # Draw bounding box
-        min_x = int(self.settings.measure_box_margin_ratio * img_width)
-        min_y = int(self.settings.measure_box_margin_ratio * img_height)
-        max_x = int((1 - self.settings.measure_box_margin_ratio) * img_width)
-        max_y = int((1 - self.settings.measure_box_margin_ratio) * img_height)
+        min_x = int(self.margin_ratio * img_width)
+        min_y = int(self.margin_ratio * img_height)
+        max_x = int((1 - self.margin_ratio) * img_width)
+        max_y = int((1 - self.margin_ratio) * img_height)
         # draw lines: top_left, top_right, bottom_right, bottom_left:
         cv2.line(save_image, (min_x, min_y), (min_x, max_y), color=rgb, thickness=1, lineType=cv2.LINE_4)
         cv2.line(save_image, (min_x, max_y), (max_x, max_y), color=rgb, thickness=1, lineType=cv2.LINE_4)
@@ -1087,10 +1096,10 @@ class FishMesh:
             x = min(img_view.canvas.winfo_width() - img_view.x_padding, x)
             y = min(img_view.canvas.winfo_height() - img_view.y_padding, y)
         elif bound_to == "box":
-            min_x = self.settings.measure_box_margin_ratio * img_view.resized_width + img_view.x_padding
-            min_y = self.settings.measure_box_margin_ratio * img_view.resized_height + img_view.y_padding
-            max_x = (1 - self.settings.measure_box_margin_ratio) * img_view.resized_width + img_view.x_padding
-            max_y = (1 - self.settings.measure_box_margin_ratio) * img_view.resized_height + img_view.y_padding
+            min_x = self.margin_ratio * img_view.resized_width + img_view.x_padding
+            min_y = self.margin_ratio * img_view.resized_height + img_view.y_padding
+            max_x = (1 - self.margin_ratio) * img_view.resized_width + img_view.x_padding
+            max_y = (1 - self.margin_ratio) * img_view.resized_height + img_view.y_padding
             x = max(min_x, x)
             y = max(min_y, y)
             x = min(max_x, x)
@@ -1101,7 +1110,7 @@ class FishMesh:
 
     def warp_image(self):
         corners_ndarray = self.points_to_ndarray(self.left_view.points)
-        self.warped_image = warp_image(self.img, corners_ndarray, self.settings.measure_box_margin_ratio)
+        self.warped_image = warp_image(self.img, corners_ndarray, self.margin_ratio)
         # self.warp_activated = True
 
     def points_to_ndarray(self, points: List[Point]):

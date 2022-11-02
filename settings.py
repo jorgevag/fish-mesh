@@ -16,7 +16,7 @@ class SettingsError(Exception):
 class Settings:
     measure_box_width: float = 42.0
     measure_box_height: float = 29.6
-    measure_box_margin_ratio: float = 0.05  # to allow showing the entire head of fish placed along the edge
+    measure_box_margin_percentage: float = 5  # to allow showing the entire head of fish placed along the edge
     font_size: int = 16
     point_size: int = 1
     show_mini_window_on_start: bool = True
@@ -31,8 +31,8 @@ class Settings:
             raise SettingsError("'Measure box height' must be larger than 0")
         if not self.point_size > 0:
             raise SettingsError("'Point size' must be larger than 0")
-        if not 0 < self.measure_box_margin_ratio <= 0.2:
-            raise SettingsError("'Measure box margin ratio' must be between 0 and 0.2")
+        if not 0 < self.measure_box_margin_percentage <= 20:
+            raise SettingsError("'Measure box margin percentage' must be between 0 and 20")
 
     @staticmethod
     def from_dict(d: Dict):
@@ -57,13 +57,13 @@ SETTING_DESCRIPTIONS = dict(
         "\ntogether with the measure box width to calculate the"
         "\nlength of the drawn lines within the measurement box"
     ),
-    measure_box_margin_ratio=(
+    measure_box_margin_percentage=(
         "This option allows you to specify how much of the adjusted"
         "\nimage outside the bounding box that will be displayed."
-        "\nThis is given as a ratio of the size of the bounding box,"
-        "\nsuch that 0.1 means that 10 % of the shown image will be"
-        "\noutside of the bounding box after the adjustment. A value"
-        "\nof 0 will only include what is inside the bounding box."
+        "\nThis is given as a percentage of the size of the bounding"
+        "\nbox, such that a value of 10 means that 10 % of the shown"
+        "\nimage will be outside of the bounding box after the adjustment."
+        "\nA value of 0 will only include what is inside the bounding box."
     ),
     font_size=(
         "The font size of the shown length measurements"
