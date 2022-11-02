@@ -1129,15 +1129,35 @@ class FishMesh:
                         " (allowed: a-z, A-Z, 0-9, -, _)")
                     return
                 self.output_folder = save_path.parent
-                self.save_image(path=save_path.parent, save_id=save_path.stem)
-                self.save_data(path=save_path.parent, save_id=save_path.stem)
+                img_path = save_path.parent / f"P-{save_path.stem}.jpg"
+                data_path = save_path.parent / f"D-{save_path.stem}.xlsx"
+                existing_file_warnings = []
+                if img_path.exists():
+                    existing_file_warnings.append(
+                        f"image file {img_path.name}"
+                    )
+                if data_path.exists():
+                    existing_file_warnings.append(
+                        f"excel file {data_path.name}"
+                    )
+                if existing_file_warnings:
+                    existing_files = " and ".join(existing_file_warnings)
+                    answered_yes = messagebox.askyesno(
+                        f"Overwrite existing file(s)?",
+                        f"The {existing_files} already exists."
+                        f" Do you want to overwrite {'it' if len(existing_file_warnings) == 1 else 'them'}?"
+                    )
+                    if not answered_yes:
+                        return
+                self.save_image(path=img_path)
+                self.save_data(data_path=data_path, img_path=img_path)
         except Exception as e:
             logger.error("Exception encountered while trying to save image and data files.")
             logger.exception(e)
         else:
             self.saved_points = deepcopy(self.right_view.points)
 
-    def save_data(self, path: Path, save_id: str):
+    def save_data(self, data_path: Path, img_path: Path):
         img_info = get_image_exif_info(self.selected_input_file)
 
         # Read ruler info (the lengths extracted from the drawn rulers):
@@ -1162,23 +1182,21 @@ class FishMesh:
         for i, (field, value) in enumerate(img_info.items()):
             df.insert(i, field, value)
 
-        df.insert(0, "image_file", create_save_image_name(save_id))
+        df.insert(0, "image_file", img_path.name)
 
         # Save excel file with the same name as image filename:
-        filename = path / create_data_file_name(save_id)
-        df.to_excel(str(filename), index=False, float_format="%.1f")
-        if not filename.exists():
+        df.to_excel(str(data_path), index=False, float_format="%.1f")
+        if not data_path.exists():
             raise WriteResultFileError(
-                f"No output excel file produced for {filename}."
+                f"No output excel file produced for {data_path}."
             )
 
-    def save_image(self, path: Path, save_id: str):
+    def save_image(self, path: Path):
         save_image = self.create_save_image()
-        filename = path / create_save_image_name(save_id)
-        cv2.imwrite(filename=str(filename), img=save_image)
-        if not filename.exists():
+        cv2.imwrite(filename=str(path), img=save_image)
+        if not path.exists():
             raise WriteResultFileError(
-                f"No output image produced for {filename}."
+                f"No output image produced for {path}."
             )
 
 
@@ -1191,14 +1209,6 @@ def clear_drawings(img_view: ImageView):
     if img_view.drawn_points:
         for drawn_corner in img_view.drawn_points:
             img_view.canvas.delete(drawn_corner)
-
-
-def create_save_image_name(save_id: str) -> str:
-    return "P-" + save_id + ".jpg"
-
-
-def create_data_file_name(save_id: str) -> str:
-    return "D-" + save_id + ".xlsx"
 
 
 def warp_image(img, corner_points, rel_margin: float):
