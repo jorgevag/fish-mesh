@@ -1315,8 +1315,8 @@ def get_image_exif_info(path: str) -> Dict:
         "image_datetime": "",
         "image_gps_latitude": "",
         "image_gps_longitude": "",
-        "image_gps_latitude_text": "",
-        "image_gps_longitude_text": ""
+        # "image_gps_latitude_text": "",
+        # "image_gps_longitude_text": ""
     }
     with open(path, "rb") as f:
         exif_img = exif.Image(f)
@@ -1324,11 +1324,11 @@ def get_image_exif_info(path: str) -> Dict:
             if hasattr(exif_img, "datetime"):
                 extracted_info["image_datetime"] = exif_img.datetime
             if hasattr(exif_img, "gps_latitude"):
-                extracted_info["image_gps_latitude"] = get_degrees(exif_img.gps_latitude)
-                extracted_info["image_gps_latitude_text"] = format_degrees(exif_img.gps_latitude)
+                extracted_info["image_gps_latitude"] = f"{get_degrees(exif_img.gps_latitude):.5f}"
+                # extracted_info["image_gps_latitude_text"] = format_degrees(exif_img.gps_latitude)
             if hasattr(exif_img, "gps_longitude"):
-                extracted_info["image_gps_longitude"] = get_degrees(exif_img.gps_longitude)
-                extracted_info["image_gps_longitude_text"] = format_degrees(exif_img.gps_longitude)
+                extracted_info["image_gps_longitude"] = f"{get_degrees(exif_img.gps_longitude):.5f}"
+                # extracted_info["image_gps_longitude_text"] = format_degrees(exif_img.gps_longitude)
     # lo = exif_img.gps_latitude
     # lo_s = format_degrees(lo)
     # lo_f = get_degrees(lo)
