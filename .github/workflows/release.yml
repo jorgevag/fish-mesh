@@ -10,7 +10,6 @@ jobs:
     runs-on: ubuntu-20.04
 #    needs: [build-macos, build-linux, build-windows]
     needs: [build-macos]
-#    needs: [build-windows] #, build-linux]
     steps:
     - uses: actions/checkout@v1
     - name: create release
@@ -35,7 +34,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       if: startsWith(github.ref, 'refs/tags/')
       with:
-#        files: ./uploads/fish-mesh-ubuntu-python3-10-macos10-15.zip
         files: ./uploads/fish-mesh-ubuntu-python3-9-8-macos12.zip
 
 #    - name: Upload release asset linux
@@ -55,7 +53,6 @@ jobs:
 #        files: ./uploads/fish-mesh-python3-9-windows2019.zip
 
   build-macos:
-#    runs-on: macOS-10.15
     runs-on: macOS-12
     steps:
     - uses: actions/checkout@v1
@@ -84,13 +81,11 @@ jobs:
         chmod +x fish-mesh.exe
     - name: zip executable
       run: |
-#        zip -r fish-mesh-ubuntu-python3-10-macos10-15 fish-mesh.exe
         zip -r fish-mesh-ubuntu-python3-9-8-macos12 fish-mesh.exe
     - name: upload artifact
       uses: actions/upload-artifact@v3
       with:
         name: uploads
-#       path: fish-mesh-ubuntu-python3-10-macos10-15.zip
         path: fish-mesh-ubuntu-python3-9-8-macos12.zip
 
 #  build-linux:
